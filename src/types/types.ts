@@ -13,6 +13,7 @@ export interface Complaint {
   date : string;
   id: number;
   user_id: number;
+  user_name: string;
   building: string; 
   floor: string; 
   area_id?: number ;

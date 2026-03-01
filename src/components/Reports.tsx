@@ -1,5 +1,5 @@
 'use client';
-import { Complaint ,Area, ComplaintType} from '@/types/types';
+import { Complaint ,Area, ComplaintType,User} from '@/types/types';
 import { Floor, Status,Building } from '@/utils/constants';
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -19,8 +19,10 @@ const Reports = () => {
   const [filteredReports, setFilteredReports] = useState<Complaint[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [types, setTypes] = useState<ComplaintType[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
+    user_id:'',
     building: '',
     floor: '',
     area_id: '',
@@ -63,6 +65,22 @@ const Reports = () => {
     }
     }
 
+    const fetchUsers = async () =>{
+      setLoading(true);
+      try {
+          const response = await fetch(`/api/users`);
+          if (!response.ok) {
+            throw new Error(`Error fetching users: ${response.statusText}`);
+          }
+          const data = await response.json();
+          setUsers(data);
+        } catch (error) {
+          alert('Error fetching types: ' + error);
+        } finally {
+          setLoading(false);
+        }
+    }
+
     const fetchtypes = async () => {
         setLoading(true);
         try {
@@ -84,6 +102,7 @@ const Reports = () => {
     fetchReports();
     fetchareas();
     fetchtypes();
+    fetchUsers();
   }, []);
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -94,6 +113,9 @@ const Reports = () => {
   const applyFilters = useCallback(() => {
     let filtered = reports;
 
+    if(filters.user_id){
+      filtered = filtered.filter(report => report.user_id === parseInt(filters.user_id));
+    }
     if (filters.building) {
       filtered = filtered.filter(report => report.building.includes(filters.building));
     }
@@ -131,8 +153,8 @@ const Reports = () => {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     // doc.text("Complaints Report", 10, 10);
     const autoTable = (await import("jspdf-autotable")).default as any;
-    const head = [['Date', 'Building', 'Floor', 'Area', 'Type', 'Details', 'Status', 'Seen Date', 'Action','Resolution Date']];
-    const body = filteredReports.map(report => [new Date(report.date).toDateString(), report.building, report.floor, report.area_name, report.complaint_type_name, report.details, report.status, report.seen ? new Date(report.seen_date as string).toDateString() : 'Not Seen', report.action?report.action:'No Action Taken', report.resolution_date ? new Date(report.resolution_date as string).toDateString() : 'Not Resolved']);
+    const head = [['Date','Submitted By', 'Building', 'Floor', 'Area', 'Type', 'Details', 'Status', 'Seen Date', 'Action','Resolution Date']];
+    const body = filteredReports.map(report => [new Date(report.date).toDateString(), users.find(user => user.id === report.user_id)?.name, report.building, report.floor, report.area_name, report.complaint_type_name, report.details, report.status, report.seen ? new Date(report.seen_date as string).toDateString() : 'Not Seen', report.action?report.action:'No Action Taken', report.resolution_date ? new Date(report.resolution_date as string).toDateString() : 'Not Resolved']);
     autoTable(doc, {
       head,
       body,
@@ -145,7 +167,7 @@ const Reports = () => {
   };
  
   const exportToXLSX = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredReports.map(report => ({Date: new Date(report.date).toDateString(), Building: report.building, Floor: report.floor, Area: report.area_name, Type: report.complaint_type_name, Details: report.details, Status: report.status, Seen: report.seen ? new Date(report.seen_date as string).toDateString() : 'Not Seen', Action: report.action?report.action:'No Action Taken', ResolutionDate: report.resolution_date ? new Date(report.resolution_date as string).toDateString() : 'Not Resolved'})));
+    const ws = XLSX.utils.json_to_sheet(filteredReports.map(report => ({Date: new Date(report.date).toDateString(), SubmittedBy: users.find(user => user.id === report.user_id)?.name, Building: report.building, Floor: report.floor, Area: report.area_name, Type: report.complaint_type_name, Details: report.details, Status: report.status, Seen: report.seen ? new Date(report.seen_date as string).toDateString() : 'Not Seen', Action: report.action?report.action:'No Action Taken', ResolutionDate: report.resolution_date ? new Date(report.resolution_date as string).toDateString() : 'Not Resolved'})));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Complaints Report");
     XLSX.writeFile(wb, "complaints-report.xlsx");
@@ -180,6 +202,16 @@ const Reports = () => {
             {Building.map(building => (
                 <option key={building.id} value={building.name}>{building.name}</option>
                 ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="block text-black text-sm md:text-base">Submitted By:</label>
+          <select name="user_id" value={filters.user_id} onChange={handleFilterChange} className="border p-2 md:p-2.5 text-black w-full">
+              <option value="">All Users</option>
+              {users.map(user => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                  ))} 
           </select>
         </div>
         
@@ -229,6 +261,7 @@ const Reports = () => {
           <thead>
             <tr className="bg-gray-200">
               <th className="border p-2 md:p-3 text-black text-xs md:text-sm whitespace-nowrap">Issue Date</th>
+              <th className="border p-2 md:p-3 text-black text-xs md:text-sm whitespace-nowrap">Submitted By</th>
               <th className="border p-2 md:p-3 text-black text-xs md:text-sm whitespace-nowrap">Building</th>
               <th className="border p-2 md:p-3 text-black text-xs md:text-sm whitespace-nowrap">Floor</th>
               <th className="border p-2 md:p-3 text-black text-xs md:text-sm whitespace-nowrap">Area</th>
@@ -244,6 +277,7 @@ const Reports = () => {
             {filteredReports.map((complaint: Complaint) => (
               <tr key={complaint.id} className="border">
                 <td className="border p-2 md:p-3 text-black text-xs md:text-sm whitespace-nowrap">{new Date(complaint.date).toDateString()}</td>
+                <td className="border p-2 md:p-3 text-black text-xs md:text-sm">{complaint.user_id ? complaint.user_name : "Deleted User"}</td>
                 <td className="border p-2 md:p-3 text-black text-xs md:text-sm">{complaint.building}</td>
                 <td className="border p-2 md:p-3 text-black text-xs md:text-sm">{complaint.floor}</td>
                 <td className="border p-2 md:p-3 text-black text-xs md:text-sm">{complaint.area_id ? complaint.area_name : "Deleted Area"}</td>
