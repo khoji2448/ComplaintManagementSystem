@@ -1,9 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+
+// Resolve where to send the user after login: the originally requested page
+// (callbackUrl), falling back to "/" which itself routes to their landing page.
+function resolveDestination(): string {
+  if (typeof window === "undefined") return "/";
+  const cb = new URLSearchParams(window.location.search).get("callbackUrl");
+  if (cb && cb.startsWith("/") && !cb.startsWith("/login")) return cb;
+  return "/";
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,6 +21,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { status } = useSession();
+
+  // Already signed in? Don't show the form — go straight through.
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(resolveDestination());
+    }
+  }, [status, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +39,6 @@ export default function LoginPage() {
       const result = await signIn("credentials", {
         email,
         password,
-        callbackUrl: "/",
         redirect: false,
       });
 
@@ -30,7 +46,7 @@ export default function LoginPage() {
         setError(result.error);
         return;
       } else if (result?.ok) {
-        router.push("/");
+        router.push(resolveDestination());
         router.refresh();
       }
     } catch (error) {

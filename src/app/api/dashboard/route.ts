@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // Helper to build dynamic WHERE clause and values based on query params
 function buildFilters(searchParams: URLSearchParams) {
@@ -50,6 +53,11 @@ function buildFilters(searchParams: URLSearchParams) {
 
 export async function GET(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !hasPermission(session.user.permissions, "dashboard:view")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const { whereClause, values } = buildFilters(searchParams);
 
@@ -74,14 +82,22 @@ export async function GET(req: Request) {
                 FROM complaints ${whereClause}
                 GROUP BY dd
               ) c ON c.dd = days.d
-              ORDER BY key;`
+              ORDER BY key;`,
+      recent: `SELECT c.id, c.date, c.building, c.floor, c.area_id, a.area_name,
+                      c.complaint_type_id, ct.type_name AS complaint_type_name, c.status
+                 FROM complaints c
+                 LEFT JOIN areas a ON c.area_id = a.id
+                 LEFT JOIN complaint_types ct ON c.complaint_type_id = ct.id
+                 ${whereClause}
+                 ORDER BY c.date DESC
+                 LIMIT 10;`
     } as const;
 
     // Execute queries with shared values. Some queries append extra conditions after whereClause;
     // for those, we reuse the same params array.
     const client = await pool.connect();
     try {
-      const [total, open, createdThisMonth, inProgress, unseen, resolvedThisMonth, avgResolutionDays, byStatus, byType, byDate] = await Promise.all([
+      const [total, open, createdThisMonth, inProgress, unseen, resolvedThisMonth, avgResolutionDays, byStatus, byType, byDate, recent] = await Promise.all([
         client.query(queries.total, values),
         client.query(queries.open, values),
         client.query(queries.createdThisMonth, values),
@@ -92,6 +108,7 @@ export async function GET(req: Request) {
         client.query(queries.byStatus, values),
         client.query(queries.byType, values),
         client.query(queries.byDate, values),
+        client.query(queries.recent, values),
       ]);
 
       const data = {
@@ -108,7 +125,8 @@ export async function GET(req: Request) {
           byStatus: byStatus.rows, // [{ key, value }]
           byType: byType.rows,     // [{ key, value }]
           byDate: byDate.rows.map((r: any) => ({ key: r.key.toISOString().slice(0,10), value: r.value })),
-        }
+        },
+        recent: recent.rows,
       };
 
       return NextResponse.json(data);

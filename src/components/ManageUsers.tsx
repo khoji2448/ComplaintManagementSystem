@@ -1,7 +1,9 @@
 "use client";
-import { UserRole } from "@/utils/constants";
 import { useEffect, useState } from "react";
-import { User, UserRoleType } from "@/types/types";
+import { User, UserRoleType, Role } from "@/types/types";
+
+const prettyRole = (name: string) =>
+  name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 interface NewUserForm {
   name: string;
@@ -12,6 +14,7 @@ interface NewUserForm {
 
 export default function ManageUsers() {
   const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [newUser, setNewUser] = useState<NewUserForm>({
@@ -39,6 +42,13 @@ export default function ManageUsers() {
         setError("Error fetching users");
         setLoading(false);
       });
+
+    fetch("/api/roles")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.roles)) setRoles(data.roles);
+      })
+      .catch(() => {});
   }, []);
 
   const handleEditClick = (user: User) => {
@@ -177,9 +187,9 @@ export default function ManageUsers() {
                 onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserRoleType })}
                 className="border text-black border-gray-300 rounded-md p-2"
               >
-                {UserRole.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
+                {roles.map((role) => (
+                  <option key={role.id} value={role.name}>
+                    {prettyRole(role.name)}
                   </option>
                 ))}
               </select>
@@ -261,9 +271,9 @@ export default function ManageUsers() {
                           value={editingUser.role}
                           onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRoleType })}
                         >
-                          {UserRole.map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {role.name}
+                          {roles.map((role) => (
+                            <option key={role.id} value={role.name}>
+                              {prettyRole(role.name)}
                             </option>
                           ))}
                         </select>
@@ -358,8 +368,11 @@ export default function ManageUsers() {
                         value={editingUser.role}
                         onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRoleType })}
                       >
-                        <option value="employee">Employee</option>
-                        <option value="admin">Admin</option>
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.name}>
+                            {prettyRole(role.name)}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="flex gap-2">
@@ -414,8 +427,11 @@ export default function ManageUsers() {
                           role: e.target.value as UserRoleType
                         })}
                       >
-                        <option value="employee">Employee</option>
-                        <option value="admin">Admin</option>
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.name}>
+                            {prettyRole(role.name)}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </>

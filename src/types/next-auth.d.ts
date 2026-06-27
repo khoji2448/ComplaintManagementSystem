@@ -7,11 +7,20 @@ declare module "next-auth" {
     user: {
       id: number;
       role: UserRoleType;
-    } & DefaultSession["employee"];
+      permissions: string[];
+    } & DefaultSession["user"];
   }
 
   interface User {
     id: number;
     role: UserRoleType;
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id: number;
+    role: UserRoleType;
+    permissions: string[];
   }
 }

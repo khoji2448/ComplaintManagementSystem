@@ -3,11 +3,12 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { PermissionKey } from "@/lib/permissions";
 
 interface NavLink {
   href: string;
   label: string;
-  roles: string[];
+  perm: PermissionKey;
 }
 
 export default function Navbar() {
@@ -16,49 +17,20 @@ export default function Navbar() {
   const router = useRouter();
 
   const navLinks: NavLink[] = [
-    {
-      href: "/dashboard",
-      label: "Dashboard",
-      roles: ["admin", "owner", "manager", "it_manager"]
-    },
-    {
-      href: "/complaintentry",
-      label: "Complaint Entry",
-      roles: ["employee", "admin"]
-    },
-    {
-      href: "/reports",
-      label: "Reports",
-      roles: ["owner", "admin"]
-    },
-    {
-      href: "/manageuser",
-      label: "Manage Users",
-      roles: ["admin"]
-    },
-    {
-      href: "/managecomplainttype",
-      label: "Manage Complaint Types",
-      roles: ["admin"]
-    },
-    {
-      href: "/manageareas",
-      label: "Manage Complaint Areas",
-      roles: ["admin"]
-    },
-    {
-      href: "/complaintsaction",
-      label: "Complaints Actions",
-      roles: ["admin", "manager", "it_manager"]
-    }
+    { href: "/dashboard", label: "Dashboard", perm: "dashboard:view" },
+    { href: "/complaintentry", label: "Complaint Entry", perm: "complaints:create" },
+    { href: "/reports", label: "Reports", perm: "reports:view" },
+    { href: "/complaintsaction", label: "Complaints Actions", perm: "complaints:action" },
+    { href: "/manageuser", label: "Manage Users", perm: "users:manage" },
+    { href: "/managecomplainttype", label: "Manage Complaint Types", perm: "complaint_types:manage" },
+    { href: "/manageareas", label: "Manage Complaint Areas", perm: "areas:manage" },
+    { href: "/manageroles", label: "Manage Roles", perm: "roles:manage" },
   ];
 
-  const userRole = session?.user?.role;
+  const permissions = session?.user?.permissions ?? [];
 
-  // Filter links based on user role
-  const authorizedLinks = navLinks.filter(link => 
-    link.roles.includes(userRole as string)
-  );
+  // Filter links based on user permissions
+  const authorizedLinks = navLinks.filter((link) => permissions.includes(link.perm));
 
   // Get current page label
   // const getCurrentPageLabel = () => {

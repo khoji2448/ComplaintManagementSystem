@@ -3,9 +3,18 @@ import { pool } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 // import bcrypt from "bcryptjs";
-import { VALID_ROLES } from "@/utils/constants";
+import { hasPermission } from "@/lib/permissions";
+
+async function roleExists(role: string): Promise<boolean> {
+  const res = await pool.query("SELECT 1 FROM roles WHERE name = $1", [role]);
+  return (res.rowCount ?? 0) > 0;
+}
 
 export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session || !hasPermission(session.user.permissions, "users:manage")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
   try {
     const res = await pool.query("SELECT id, name, email, password, role FROM users ORDER BY created_at DESC");
     return NextResponse.json(res.rows);
@@ -17,7 +26,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "admin") {
+  if (!session || !hasPermission(session.user.permissions, "users:manage")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -28,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "All fields are required" }, { status: 400 });
     }
 
-    if (!VALID_ROLES.includes(role)) {
+    if (!(await roleExists(role))) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 

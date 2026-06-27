@@ -2,11 +2,12 @@ import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { hasPermission } from "@/lib/permissions";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions);
     const {id} = await params;
-    if (!session || session.user.role !== "admin") {
+    if (!session || !hasPermission(session.user.permissions, "complaint_types:manage")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
   
@@ -24,7 +25,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions);
     const {id} = await params;
-    if (!session || session.user.role !== "admin") {
+    if (!session || !hasPermission(session.user.permissions, "complaint_types:manage")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
   

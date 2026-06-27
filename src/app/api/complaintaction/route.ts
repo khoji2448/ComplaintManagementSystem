@@ -3,11 +3,14 @@ import { pool } from "@/lib/db";
 import { Complaint } from "@/types/types";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { hasPermission } from "@/lib/permissions";
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!session || !hasPermission(session.user.permissions, "complaints:action")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
     const query = `
       SELECT 
         c.*,

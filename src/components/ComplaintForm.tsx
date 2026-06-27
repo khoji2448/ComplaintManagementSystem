@@ -54,7 +54,7 @@ export default function ComplaintForm({
     if (session?.user?.id) {
       setFormData(prev => ({
         ...prev,
-        user_id: session.user.id
+        user_id: String(session.user.id)
       }));
     }
   }, [session]);
@@ -186,7 +186,7 @@ export default function ComplaintForm({
   const resetForm = () => {
     setFormData({
       date: getTodayDate().toLocaleDateString('en-CA'),
-      user_id: session?.user?.id || "",
+      user_id: session?.user?.id ? String(session.user.id) : "",
       building: "",
       floor: "",
       area_id: "",

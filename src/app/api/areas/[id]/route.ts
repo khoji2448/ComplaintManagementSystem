@@ -2,6 +2,7 @@ import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from 'next/server';
+import { hasPermission } from "@/lib/permissions";
 
 export async function DELETE(
     request: Request,
@@ -10,7 +11,7 @@ export async function DELETE(
     try {
         const session = await getServerSession(authOptions);
         const { id } = await params;
-        if (!session || session.user.role !== "admin") {
+        if (!session || !hasPermission(session.user.permissions, "areas:manage")) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
@@ -37,7 +38,7 @@ export async function PUT(
     { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "admin") {
+    if (!session || !hasPermission(session.user.permissions, "areas:manage")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

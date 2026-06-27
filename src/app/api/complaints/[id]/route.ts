@@ -2,33 +2,34 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    console.log("Session:",session);
-    console.log("USER ROLE:",session?.user?.role);
-    if (!session || !["admin", "manager", "it_manager"].includes(session.user.role)) {
+    if (!session || !hasPermission(session.user.permissions, "complaints:action")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     const {id} = await params;
     const body = await req.json();
-    if ( body.resolution_date && body.action) {
-      const res = await pool.query(
-        `UPDATE complaints 
-         SET resolution_date = $1, 
-             status = 'Resolved',
-             action = $2
-         WHERE id = $3
-         RETURNING *`,
-        [body.resolution_date,body.action, id]
-      );
-
-      if (res.rowCount === 0) {
-        return NextResponse.json({ error: "Complaint not found" }, { status: 404 });
-      }
-      return NextResponse.json(res.rows[0]);
+    if (!body.resolution_date || !body.action) {
+      return NextResponse.json({ error: "resolution_date and action are required" }, { status: 400 });
     }
+
+    const res = await pool.query(
+      `UPDATE complaints
+       SET resolution_date = $1,
+           status = 'Resolved',
+           action = $2
+       WHERE id = $3
+       RETURNING *`,
+      [body.resolution_date,body.action, id]
+    );
+
+    if (res.rowCount === 0) {
+      return NextResponse.json({ error: "Complaint not found" }, { status: 404 });
+    }
+    return NextResponse.json(res.rows[0]);
 
   }catch (error) {
     return NextResponse.json({ error: "Error updating complaint" + error }, { status: 500 });

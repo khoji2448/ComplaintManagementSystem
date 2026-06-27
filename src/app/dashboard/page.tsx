@@ -41,6 +41,7 @@ interface DashboardData {
     byType: SeriesItem[];
     byDate: SeriesItem[]; // YYYY-MM-DD
   }
+  recent: Complaint[];
 }
 
 function KPICard({ label, value, accent = 'indigo' }: { label: string; value: number | string; accent?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'sky' }) {
@@ -72,24 +73,15 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const [mRes, rRes] = await Promise.all([
-          fetch('/api/dashboard'),
-          fetch('/api/reports'),
-        ]);
+        const mRes = await fetch('/api/dashboard');
         if (!mRes.ok) throw new Error('Failed to load metrics');
-        if (!rRes.ok) throw new Error('Failed to load recent complaints');
         const data = (await mRes.json()) as DashboardData;
-        const reports = (await rRes.json()) as Complaint[];
 
         if (isMounted) {
           setMetrics(data);
-          const sorted = reports
-            .slice()
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 10);
-          setRecent(sorted);
+          setRecent(data.recent ?? []);
         }
-      } catch (e: unknown) { 
+      } catch (e: unknown) {
         if (isMounted) setError((e as Error)?.message ?? 'Unknown error');
       } finally {
         if (isMounted) setLoading(false);
@@ -176,7 +168,7 @@ export default function DashboardPage() {
               <span className="text-gray-700">Avg. resolution (days)</span>
               <span className="font-semibold">{metrics?.avgResolutionDays ?? 0}</span>
             </div>
-            {session?.user?.role === "admin" || session?.user?.role === "owner" ? (
+            {session?.user?.permissions?.includes("reports:view") ? (
             <Link href="/reports" className="inline-flex text-indigo-600 hover:underline mt-2">View detailed reports →</Link>
             ) : null}
           </div>
@@ -187,7 +179,7 @@ export default function DashboardPage() {
       <div className="rounded-lg border bg-white p-4 md:p-5 shadow-sm mt-4 md:mt-6">
         <div className="mb-3 md:mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-lg">Recent Complaints</h2>
-          {session?.user?.role === "admin" || session?.user?.role === "manager" || session?.user?.role === "it_manager" ? (
+          {session?.user?.permissions?.includes("complaints:action") ? (
             <Link href="/complaintsaction" className="text-sm text-indigo-600 hover:underline">Manage →</Link>
           ) : null}
         </div>

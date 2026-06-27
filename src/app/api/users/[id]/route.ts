@@ -3,11 +3,11 @@ import { pool } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 // import bcrypt from "bcryptjs";
-import { VALID_ROLES } from "@/utils/constants";
+import { hasPermission } from "@/lib/permissions";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "admin") {
+  if (!session || !hasPermission(session.user.permissions, "users:manage")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
@@ -15,12 +15,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const data = await req.json();
     const { name, email, password, role } = data;
-    
+
     if (!name || !email || !role) {
       return NextResponse.json({ error: "Name, email, and role are required" }, { status: 400 });
     }
 
-    if (!VALID_ROLES.includes(role)) {
+    const roleCheck = await pool.query("SELECT 1 FROM roles WHERE name = $1", [role]);
+    if ((roleCheck.rowCount ?? 0) === 0) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
@@ -66,7 +67,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions);
     const {id} = await params;
-    if (!session || session.user.role !== "admin") {
+    if (!session || !hasPermission(session.user.permissions, "users:manage")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
   

@@ -1,58 +1,45 @@
 import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { PAGE_PERMISSIONS } from '@/lib/permissions';
 
-// Define allowed paths for each role
-const roleAccess = {
-  employee: ['/complaints', '/api/complaints'],
-  owner: ['/reports', '/api/reports'],
-  admin: ['*'], // Admin has access to everything
-  manager: ['/complaintsaction', '/api/complaint/action', '/api/complaints'],
-  it_manager: ['/complaintsaction', '/api/complaint/action', '/api/complaints'],
-};
-
-// Paths that should be excluded from middleware
-const excludedPaths = [
+// Prefixes that bypass auth entirely (NOTE: do not put '/' here — it is a
+// prefix of every path. The landing page '/' is matched exactly below.)
+const excludedPrefixes = [
   '/api/auth',
   '/_next',
   '/images',
   '/favicon.ico',
   '/login',
-  '/'
 ];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Check if the path should be excluded
-  if (excludedPaths.some(excludedPath => path.startsWith(excludedPath))) {
+  if (path === '/' || excludedPrefixes.some((p) => path.startsWith(p))) {
     return NextResponse.next();
   }
 
-  const token = await getToken({ 
+  const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET 
+    secret: process.env.NEXTAUTH_SECRET,
   });
-  
+
+  // Not signed in: API callers get JSON 401, pages get redirected to login.
   if (!token) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    if (path.startsWith('/api')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('callbackUrl', path + request.nextUrl.search);
+    return NextResponse.redirect(loginUrl);
   }
 
-  const userRole = token.role as keyof typeof roleAccess;
-
-  // Admin has access to everything
-  if (userRole === 'admin') {
-    return NextResponse.next();
-  }
-
-  // Check if user has access to the requested path
-  const allowedPaths = roleAccess[userRole] || [];
-  const hasAccess = allowedPaths.some(allowedPath => {
-    if (allowedPath === '*') return true;
-    return path.startsWith(allowedPath);
-  });
-  
-  if (!hasAccess) {
+  // Page-level permission gating. API routes enforce their own (method-aware)
+  // authorization inside each handler.
+  const permissions = (token.permissions as string[]) ?? [];
+  const rule = PAGE_PERMISSIONS.find((r) => path.startsWith(r.prefix));
+  if (rule && !permissions.includes(rule.perm)) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
@@ -61,7 +48,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all paths except static files and api/auth routes
     '/((?!api/auth|_next/static|_next/image|favicon.ico|images|public|login).*)',
   ],
 };

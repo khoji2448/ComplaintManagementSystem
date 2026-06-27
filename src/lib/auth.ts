@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 // import { compare } from "bcryptjs";
 import { Pool } from "pg";
 import { UserRoleType } from "@/types/types";
+import { getPermissionsForRole } from "@/lib/roles";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -23,13 +24,6 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Missing email or password");
         }
-
-        if (
-            credentials.email === "admin@example.com" &&
-            credentials.password === "admin123"
-          ) {
-            return { id: "1", name: "Admin", email: credentials.email, role: "admin" };
-          }
 
         const client = await pool.connect();
         try {
@@ -59,8 +53,9 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        token.id = user.id as number;
         token.role = user.role;
+        token.permissions = await getPermissionsForRole(user.role);
       }
       return token;
     },
@@ -68,6 +63,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as number;
         session.user.role = token.role as UserRoleType;
+        session.user.permissions = (token.permissions as string[]) ?? [];
       }
       return session;
     },

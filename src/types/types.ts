@@ -40,6 +40,20 @@ export interface Area {
   area_name: string; 
 }
 
+export interface Permission {
+  id: number;
+  key: string;
+  label: string;
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  permissions: string[]; // permission keys
+}
+
 export interface APIResponse<T> {
   success: boolean;
   data?: T;
