@@ -1,23 +1,42 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Role, Permission } from "@/types/types";
+import { Plus, Check, Pencil, Trash2, ShieldCheck } from "lucide-react";
+import Panel from "@/components/ui/Panel";
+import Skeleton from "@/components/ui/Skeleton";
+import { Field, TextInput } from "@/components/ui/Field";
+import { notify } from "@/lib/toast";
 
 const prettyRole = (name: string) =>
   name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Selectable permission chip
+function PermChip({ label, active, onToggle }: { label: string; active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`inline-flex items-center gap-1.5 border px-2.5 py-1.5 text-xs transition-colors duration-150 ${
+        active
+          ? "border-[var(--ink)] bg-[var(--ink)] text-white"
+          : "border-[var(--hairline)] text-[var(--slate)] hover:border-[var(--slate)]"
+      }`}
+    >
+      {active && <Check size={12} />}
+      {label}
+    </button>
+  );
+}
 
 export default function ManageRoles() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [catalog, setCatalog] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
-  // Create form
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newPerms, setNewPerms] = useState<string[]>([]);
 
-  // Edit state
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editPerms, setEditPerms] = useState<string[]>([]);
   const [editDescription, setEditDescription] = useState("");
@@ -31,7 +50,7 @@ export default function ManageRoles() {
       setRoles(data.roles ?? []);
       setCatalog(data.catalog ?? []);
     } catch (e) {
-      setError((e as Error).message);
+      notify.error((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -41,19 +60,13 @@ export default function ManageRoles() {
     load();
   }, []);
 
-  const flash = (msg: string) => {
-    setNotice(msg);
-    setTimeout(() => setNotice(""), 3000);
-  };
-
   const toggle = (list: string[], key: string) =>
     list.includes(key) ? list.filter((k) => k !== key) : [...list, key];
 
   const createRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     if (!newName.trim()) {
-      setError("Role name is required");
+      notify.error("Role name is required");
       return;
     }
     const res = await fetch("/api/roles", {
@@ -63,13 +76,13 @@ export default function ManageRoles() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Failed to create role");
+      notify.error(data.error ?? "Couldn’t create role");
       return;
     }
     setNewName("");
     setNewDescription("");
     setNewPerms([]);
-    flash("Role created");
+    notify.success("Role created");
     load();
   };
 
@@ -80,7 +93,6 @@ export default function ManageRoles() {
   };
 
   const saveEdit = async (id: number) => {
-    setError("");
     const res = await fetch(`/api/roles/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -88,160 +100,165 @@ export default function ManageRoles() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Failed to update role");
+      notify.error(data.error ?? "Couldn’t update role");
       return;
     }
     setEditingId(null);
-    flash("Role updated");
+    notify.success("Role updated");
     load();
   };
 
   const deleteRole = async (id: number, name: string) => {
-    if (!confirm(`Delete role "${prettyRole(name)}"? This cannot be undone.`)) return;
-    setError("");
+    if (!confirm(`Delete role "${prettyRole(name)}"? This can’t be undone.`)) return;
     const res = await fetch(`/api/roles/${id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Failed to delete role");
+      notify.error(data.error ?? "Couldn’t delete role");
       return;
     }
-    flash("Role deleted");
+    notify.success("Role deleted");
     load();
   };
 
-  if (loading) return <p className="text-gray-600">Loading roles...</p>;
-
   return (
-    <div className="max-w-4xl mx-auto text-black">
-      <h1 className="text-2xl font-bold mb-4">Manage Roles &amp; Permissions</h1>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div>
+        <div className="font-mono-num text-[10px] uppercase tracking-[0.22em] text-[var(--mute)]">Manage roles</div>
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] md:text-3xl">Roles &amp; permissions</h1>
+      </div>
 
-      {error && <div className="mb-3 rounded bg-red-100 text-red-700 px-3 py-2 text-sm">{error}</div>}
-      {notice && <div className="mb-3 rounded bg-green-100 text-green-700 px-3 py-2 text-sm">{notice}</div>}
-
-      {/* Create role */}
-      <form onSubmit={createRole} className="mb-8 rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="font-semibold text-lg mb-3">Create a new role</h2>
-        <div className="grid sm:grid-cols-2 gap-3 mb-3">
-          <input
-            className="border border-gray-300 rounded-md p-2"
-            placeholder="Role name (e.g. Supervisor)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <input
-            className="border border-gray-300 rounded-md p-2"
-            placeholder="Description (optional)"
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-          />
-        </div>
-        <p className="text-sm text-gray-600 mb-2">Permissions</p>
-        <div className="grid sm:grid-cols-2 gap-2 mb-4">
-          {catalog.map((p) => (
-            <label key={p.key} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={newPerms.includes(p.key)}
-                onChange={() => setNewPerms((l) => toggle(l, p.key))}
-              />
-              {p.label}
-            </label>
-          ))}
-        </div>
-        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-          Create Role
-        </button>
-      </form>
-
-      {/* Existing roles */}
-      <div className="space-y-4">
-        {roles.map((role) => {
-          const isEditing = editingId === role.id;
-          return (
-            <div key={role.id} className="rounded-lg border bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="font-semibold text-lg">
-                    {prettyRole(role.name)}
-                    {role.is_system && (
-                      <span className="ml-2 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">system</span>
-                    )}
-                  </h3>
-                  {!isEditing && <p className="text-sm text-gray-600">{role.description}</p>}
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  {!isEditing && !role.is_system && (
-                    <button
-                      className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
-                      onClick={() => startEdit(role)}
-                    >
-                      Edit
-                    </button>
-                  )}
-                  {!isEditing && !role.is_system && (
-                    <button
-                      className="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                      onClick={() => deleteRole(role.id, role.name)}
-                    >
-                      Delete
-                    </button>
-                  )}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start">
+        {/* left: create */}
+        <div className="lg:sticky lg:top-8">
+          <Panel title="Create a role">
+            <form onSubmit={createRole} className="space-y-4">
+              <Field label="Role name" htmlFor="r_name">
+                <TextInput id="r_name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Supervisor" />
+              </Field>
+              <Field label="Description" htmlFor="r_desc">
+                <TextInput id="r_desc" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Optional" />
+              </Field>
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--slate)]">Permissions</p>
+                <div className="flex flex-wrap gap-2">
+                  {catalog.map((p) => (
+                    <PermChip
+                      key={p.key}
+                      label={p.label}
+                      active={newPerms.includes(p.key)}
+                      onToggle={() => setNewPerms((l) => toggle(l, p.key))}
+                    />
+                  ))}
                 </div>
               </div>
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.02]"
+                style={{ transitionTimingFunction: "var(--ease)" }}
+              >
+                <Plus size={15} /> Create role
+              </button>
+            </form>
+          </Panel>
+        </div>
 
-              {isEditing ? (
-                <div className="mt-3">
-                  <input
-                    className="border border-gray-300 rounded-md p-2 w-full mb-3"
-                    placeholder="Description"
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                  />
-                  <div className="grid sm:grid-cols-2 gap-2 mb-3">
-                    {catalog.map((p) => (
-                      <label key={p.key} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={editPerms.includes(p.key)}
-                          onChange={() => setEditPerms((l) => toggle(l, p.key))}
-                        />
-                        {p.label}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                      onClick={() => saveEdit(role.id)}
-                    >
-                      Save
-                    </button>
-                    <button
-                      className="bg-gray-300 px-3 py-1 rounded hover:bg-gray-400"
-                      onClick={() => setEditingId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {role.permissions.length === 0 && (
-                    <span className="text-sm text-gray-400">No permissions</span>
-                  )}
-                  {role.permissions.map((key) => {
-                    const label = catalog.find((c) => c.key === key)?.label ?? key;
-                    return (
-                      <span key={key} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded">
-                        {label}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
+        {/* right: existing roles */}
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-28 w-full" />
+            ))}
+          </div>
+        ) : roles.length === 0 ? (
+          <Panel title="Roles">
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <ShieldCheck size={32} strokeWidth={1.25} className="text-[var(--mute)]" />
+              <p className="mt-3 text-sm text-[var(--slate)]">No roles yet.</p>
             </div>
-          );
-        })}
+          </Panel>
+        ) : (
+          <div className="space-y-3">
+            {roles.map((role) => {
+            const isEditing = editingId === role.id;
+            return (
+              <Panel key={role.id}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="flex items-center gap-2 font-display text-base font-semibold text-[var(--ink)]">
+                      {prettyRole(role.name)}
+                      {role.is_system && (
+                        <span className="border border-[var(--hairline)] px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">
+                          system
+                        </span>
+                      )}
+                    </h3>
+                    {!isEditing && role.description && (
+                      <p className="mt-1 text-sm text-[var(--slate)]">{role.description}</p>
+                    )}
+                  </div>
+                  {!isEditing && !role.is_system && (
+                    <div className="flex shrink-0 gap-1">
+                      <button onClick={() => startEdit(role)} aria-label="Edit" className="p-1.5 text-[var(--slate)] transition-colors hover:text-[var(--ink)]">
+                        <Pencil size={15} />
+                      </button>
+                      <button onClick={() => deleteRole(role.id, role.name)} aria-label="Delete" className="p-1.5 text-[var(--slate)] transition-colors hover:text-[var(--signal)]">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {isEditing ? (
+                  <div className="mt-4 space-y-4">
+                    <Field label="Description" htmlFor={`desc_${role.id}`}>
+                      <TextInput id={`desc_${role.id}`} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Description" />
+                    </Field>
+                    <div className="flex flex-wrap gap-2">
+                      {catalog.map((p) => (
+                        <PermChip
+                          key={p.key}
+                          label={p.label}
+                          active={editPerms.includes(p.key)}
+                          onToggle={() => setEditPerms((l) => toggle(l, p.key))}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveEdit(role.id)}
+                        className="inline-flex items-center gap-1.5 bg-[var(--mint)] px-4 py-2 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.02]"
+                        style={{ transitionTimingFunction: "var(--ease)" }}
+                      >
+                        <Check size={15} /> Save
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="border border-[var(--hairline)] px-4 py-2 text-sm text-[var(--slate)] transition-colors hover:text-[var(--ink)]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {role.permissions.length === 0 && (
+                      <span className="text-sm text-[var(--mute)]">No permissions</span>
+                    )}
+                    {role.permissions.map((key) => {
+                      const label = catalog.find((c) => c.key === key)?.label ?? key;
+                      return (
+                        <span key={key} className="border border-[var(--hairline)] bg-[var(--paper)] px-2 py-0.5 text-xs text-[var(--slate)]">
+                          {label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </Panel>
+            );
+          })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,12 +1,5 @@
-import ManageAreas from '@/components/ManageAreas'
-import React from 'react'
+import ManageAreas from "@/components/ManageAreas";
 
-const ManageArea = () => {
-  return (
-    <div>
-        <ManageAreas/>
-    </div>
-  )
+export default function ManageAreasPage() {
+  return <ManageAreas />;
 }
-
-export default ManageArea

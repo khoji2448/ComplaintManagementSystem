@@ -3,15 +3,28 @@
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
 import type { ReactNode } from "react";
-import Navbar from "../components/Navbar";
+import Sidebar from "../components/Navbar";
 import { usePathname } from "next/navigation";
-import {Poppins} from "next/font/google";
-import Head from "next/head";
+import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins',
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-inter",
+});
+
+const grotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-grotesk",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-jetbrains",
 });
 
 export default function RootLayout({
@@ -20,26 +33,38 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const isLoginPage = pathname === '/login';
+  const isLoginPage = pathname === "/login";
 
   return (
     <html lang="en">
-      <Head>
+      <head>
         <title>Complaint Management System</title>
         <meta name="description" content="Complaint Management System" />
-        <meta property="og:title" content="Complaint Management System" />
-        <meta property="og:description" content="Complaint Management System" />
-      </Head> 
-      <body className={poppins.className}>
+      </head>
+      <body
+        className={`${inter.variable} ${grotesk.variable} ${jetbrains.variable} ${inter.className}`}
+      >
         <SessionProvider>
-          <div className="min-h-screen bg-gray-100">
-          {!isLoginPage && <Navbar />}
-          <div>
-              <main className="p-4">
-                {children}
-              </main>
-            </div>
+          <div className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+            {!isLoginPage && <Sidebar />}
+            <main
+              className={
+                isLoginPage
+                  ? ""
+                  : "pt-[56px] md:pt-0 md:pl-[248px]"
+              }
+            >
+              <div className={isLoginPage ? "" : "p-4 md:p-8"}>{children}</div>
+            </main>
           </div>
+          <ToastContainer
+            position="bottom-right"
+            autoClose={3000}
+            hideProgressBar
+            closeButton={false}
+            theme="light"
+            toastClassName="!rounded-none !border !border-[var(--hairline)] !bg-[var(--card)] !text-[var(--ink)] !shadow-[0_8px_32px_rgba(14,17,22,0.12)] font-[inherit]"
+          />
         </SessionProvider>
       </body>
     </html>

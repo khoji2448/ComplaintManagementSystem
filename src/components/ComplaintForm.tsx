@@ -5,7 +5,9 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Area, Complaint, ComplaintType } from "@/types/types";
 import { Building, Floor } from "@/utils/constants";
-import { X } from 'lucide-react';
+import Modal from "@/components/ui/Modal";
+import { Field, SelectInput, Textarea, fieldClass } from "@/components/ui/Field";
+import { notify } from "@/lib/toast";
 
 function getTodayDate() {
   return new Date();
@@ -19,12 +21,12 @@ interface ComplaintFormProps {
   refreshComplaints: () => void;
 }
 
-export default function ComplaintForm({ 
-  editingComplaint, 
-  setEditingComplaint, 
-  showModal, 
+export default function ComplaintForm({
+  editingComplaint,
+  setEditingComplaint,
+  showModal,
   setShowModal,
-  refreshComplaints 
+  refreshComplaints,
 }: ComplaintFormProps) {
   const { data: session } = useSession();
   const [selectedDate, setSelectedDate] = useState<Date>(getTodayDate());
@@ -36,26 +38,23 @@ export default function ComplaintForm({
   const [isNoComplaint, setIsNoComplaint] = useState(false);
 
   // Check if user is admin
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = session?.user?.role === "admin";
 
   const [formData, setFormData] = useState({
-    date: getTodayDate().toLocaleDateString('en-CA'),
+    date: getTodayDate().toLocaleDateString("en-CA"),
     user_id: "",
     building: "",
     floor: "",
     area_id: "",
     complaint_type_id: "",
     details: "",
-    status: "Pending"
+    status: "Pending",
   });
 
   // Set user_id when session is available
   useEffect(() => {
     if (session?.user?.id) {
-      setFormData(prev => ({
-        ...prev,
-        user_id: String(session.user.id)
-      }));
+      setFormData((prev) => ({ ...prev, user_id: String(session.user.id) }));
     }
   }, [session]);
 
@@ -63,10 +62,7 @@ export default function ComplaintForm({
   useEffect(() => {
     if (!isAdmin) {
       setSelectedDate(getTodayDate());
-      setFormData(prev => ({
-        ...prev,
-        date: getTodayDate().toLocaleDateString('en-CA')
-      }));
+      setFormData((prev) => ({ ...prev, date: getTodayDate().toLocaleDateString("en-CA") }));
     }
   }, [isAdmin]);
 
@@ -74,17 +70,15 @@ export default function ComplaintForm({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch areas
         const areasResponse = await fetch("/api/areas");
         const areasData = await areasResponse.json();
         setAreas(areasData);
-  
-        // Fetch complaint types
+
         const typesResponse = await fetch("/api/complaint-types");
         const typesData = await typesResponse.json();
         setComplaintTypes(typesData);
       } catch (error) {
-        alert('Error fetching data: ' + error);
+        notify.error("Couldn’t load areas and types: " + error);
       }
     };
     fetchData();
@@ -97,40 +91,35 @@ export default function ComplaintForm({
     if (editingComplaint) {
       const date = new Date(editingComplaint.date);
       setSelectedDate(date);
-      
-      // Find the area and complaint type objects
-      // const selectedArea = areas.find(area => area.id === editingComplaint.area_id);
-      // const selectedType = complaintTypes.find(type => type.id === editingComplaint.complaint_type_id);
 
-      // Check if this is a "No Complaint" entry
       const noComplaint = editingComplaint.status === "No Complaint";
       setIsNoComplaint(noComplaint);
 
       setFormData({
-        date: date.toLocaleDateString('en-CA'),
+        date: date.toLocaleDateString("en-CA"),
         user_id: editingComplaint.user_id?.toString() || "",
         building: editingComplaint.building || "",
         floor: editingComplaint.floor || "",
         area_id: editingComplaint.area_id?.toString() || "",
         complaint_type_id: editingComplaint.complaint_type_id?.toString() || "",
         details: editingComplaint.details || "",
-        status: editingComplaint.status || "Pending"
+        status: editingComplaint.status || "Pending",
       });
     }
   }, [editingComplaint, areas, complaintTypes]);
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-  
-    if (name === 'area') {
-      const selectedArea = areas.find(area => area.area_name === value);
-      setFormData(prev => ({ ...prev, area_id: selectedArea?.id.toString() || '' }));
-    } else if (name === 'complaintType') {
-      const selectedType = complaintTypes.find(type => type.type_name === value);
-      setFormData(prev => ({ ...prev, complaint_type_id: selectedType?.id.toString() || '' }));
-    } else if (name === 'floor') {
-      setFormData(prev => ({ ...prev, floor: value }));
-    } else if (name === 'details') {
+
+    if (name === "area") {
+      const selectedArea = areas.find((area) => area.area_name === value);
+      setFormData((prev) => ({ ...prev, area_id: selectedArea?.id.toString() || "" }));
+    } else if (name === "complaintType") {
+      const selectedType = complaintTypes.find((type) => type.type_name === value);
+      setFormData((prev) => ({ ...prev, complaint_type_id: selectedType?.id.toString() || "" }));
+    } else if (name === "floor") {
+      setFormData((prev) => ({ ...prev, floor: value }));
+    } else if (name === "details") {
       if (value.length > 0) {
         const filteredSuggestions = suggestions.filter((item) =>
           item.toLowerCase().includes(value.toLowerCase())
@@ -140,9 +129,9 @@ export default function ComplaintForm({
       } else {
         setShowDropdown(false);
       }
-      setFormData(prev => ({ ...prev, details: value }));
+      setFormData((prev) => ({ ...prev, details: value }));
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
@@ -154,50 +143,45 @@ export default function ComplaintForm({
   const handleDateChange = (date: Date | null) => {
     if (date) {
       const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
-      setFormData(prev => ({ ...prev, date: formattedDate }));
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      setFormData((prev) => ({ ...prev, date: `${year}-${month}-${day}` }));
       setSelectedDate(date);
     } else {
-      setFormData(prev => ({ ...prev, date: '' }));
+      setFormData((prev) => ({ ...prev, date: "" }));
     }
   };
 
   const handleNoComplaintToggle = () => {
     const newNoComplaintState = !isNoComplaint;
     setIsNoComplaint(newNoComplaintState);
-    
+
     if (newNoComplaintState) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         status: "No Complaint",
-        details: "No complaints to report for this area"
+        details: "No complaints to report for this area",
       }));
     } else {
-      setFormData(prev => ({
-        ...prev,
-        status: "Pending",
-        details: ""
-      }));
+      setFormData((prev) => ({ ...prev, status: "Pending", details: "" }));
     }
   };
 
   const resetForm = () => {
     setFormData({
-      date: getTodayDate().toLocaleDateString('en-CA'),
+      date: getTodayDate().toLocaleDateString("en-CA"),
       user_id: session?.user?.id ? String(session.user.id) : "",
       building: "",
       floor: "",
       area_id: "",
       complaint_type_id: "",
       details: "",
-      status: "Pending"
+      status: "Pending",
     });
     setSelectedDate(getTodayDate());
     setShowDropdown(false);
     setIsNoComplaint(false);
-    
+
     if (setEditingComplaint && editingComplaint) {
       setEditingComplaint(null);
     }
@@ -213,7 +197,7 @@ export default function ComplaintForm({
     setLoading(true);
 
     if (!session?.user?.id) {
-      alert("Please login to submit a complaint");
+      notify.error("Please log in to submit a complaint");
       setLoading(false);
       return;
     }
@@ -221,15 +205,15 @@ export default function ComplaintForm({
     // For "No Complaint", we need to ensure we have at least building
     if (isNoComplaint) {
       if (!formData.building) {
-        alert("Please select building for 'No Complaint' report");
+        notify.error("Pick a building for the 'No complaint' report");
         setLoading(false);
         return;
       }
-      const url = editingComplaint 
-      ? `/api/no-complaint/${editingComplaint.id}`
-      : "/api/no-complaint";
-    
-    const method = editingComplaint ? "PUT" : "POST";
+      const url = editingComplaint
+        ? `/api/no-complaint/${editingComplaint.id}`
+        : "/api/no-complaint";
+
+      const method = editingComplaint ? "PUT" : "POST";
       try {
         const response = await fetch(url, {
           method,
@@ -237,247 +221,241 @@ export default function ComplaintForm({
           body: JSON.stringify({
             user_id: session.user.id,
             building: formData.building,
-            date: formData.date
+            date: formData.date,
           }),
         });
 
         const result = await response.json();
-    
-      if (response.ok) {
-        alert(editingComplaint ? "Complaint Updated!" : "Complaint Submitted!");
-        
-        // Save details to localStorage for suggestions (only for actual complaints)
-        if (formData.details && !suggestions.includes(formData.details) && !isNoComplaint) {
-          const updatedSuggestions = [...suggestions, formData.details];
-          setSuggestions(updatedSuggestions);
-          localStorage.setItem("complaintDetails", JSON.stringify(updatedSuggestions));
+
+        if (response.ok) {
+          notify.success(editingComplaint ? "Complaint updated" : "Complaint submitted");
+
+          if (formData.details && !suggestions.includes(formData.details) && !isNoComplaint) {
+            const updatedSuggestions = [...suggestions, formData.details];
+            setSuggestions(updatedSuggestions);
+            localStorage.setItem("complaintDetails", JSON.stringify(updatedSuggestions));
+          }
+
+          resetForm();
+          setShowModal(false);
+          refreshComplaints();
+        } else {
+          notify.error(`Couldn’t ${editingComplaint ? "update" : "submit"}: ${result.error}`);
         }
-        
-        resetForm();
-        setShowModal(false);
-        refreshComplaints();
-      } else {
-        alert(`Error ${editingComplaint ? 'updating' : 'submitting'} complaint: ${result.error}`);
-      }
       } catch (err) {
-        alert("An error occurred while submitting");
+        notify.error("Something went wrong while submitting");
         console.error("Error:", err);
       } finally {
         setLoading(false);
       }
     }
 
-    if(!isNoComplaint){
-    const url = editingComplaint 
-      ? `/api/complaints/${editingComplaint.id}`
-      : "/api/complaints";
-    
-    const method = editingComplaint ? "PUT" : "POST";
-  
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-        }),
-      });
-    
-      const result = await response.json();
-    
-      if (response.ok) {
-        alert(editingComplaint ? "Complaint Updated!" : "Complaint Submitted!");
-        
-        // Save details to localStorage for suggestions (only for actual complaints)
-        if (formData.details && !suggestions.includes(formData.details) && !isNoComplaint) {
-          const updatedSuggestions = [...suggestions, formData.details];
-          setSuggestions(updatedSuggestions);
-          localStorage.setItem("complaintDetails", JSON.stringify(updatedSuggestions));
-        }
-        
-        resetForm();
-        setShowModal(false);
-        refreshComplaints();
-      } else {
-        alert(`Error ${editingComplaint ? 'updating' : 'submitting'} complaint: ${result.error}`);
-      }
-    } catch (error) {
-      alert(`Error ${editingComplaint ? 'updating' : 'submitting'} complaint: ${error}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-};
+    if (!isNoComplaint) {
+      const url = editingComplaint
+        ? `/api/complaints/${editingComplaint.id}`
+        : "/api/complaints";
 
-  if (!showModal) return null;
+      const method = editingComplaint ? "PUT" : "POST";
+
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...formData }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          notify.success(editingComplaint ? "Complaint updated" : "Complaint submitted");
+
+          if (formData.details && !suggestions.includes(formData.details) && !isNoComplaint) {
+            const updatedSuggestions = [...suggestions, formData.details];
+            setSuggestions(updatedSuggestions);
+            localStorage.setItem("complaintDetails", JSON.stringify(updatedSuggestions));
+          }
+
+          resetForm();
+          setShowModal(false);
+          refreshComplaints();
+        } else {
+          notify.error(`Couldn’t ${editingComplaint ? "update" : "submit"}: ${result.error}`);
+        }
+      } catch (error) {
+        notify.error(`Couldn’t ${editingComplaint ? "update" : "submit"}: ${error}`);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h3 className="text-lg font-bold text-black">
-            {editingComplaint ? 'Edit Complaint' : 'Submit Complaint'}
-          </h3>
-          <button 
-            onClick={handleCancel}
-            className="text-gray-500 hover:text-gray-700"
+    <Modal
+      open={showModal}
+      onClose={handleCancel}
+      title={editingComplaint ? "Edit complaint" : "New complaint"}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* No Complaint toggle as a switch */}
+        <button
+          type="button"
+          onClick={handleNoComplaintToggle}
+          className="flex w-full items-center justify-between border border-[var(--hairline)] bg-[var(--paper)] px-3 py-2.5 text-left transition-colors hover:border-[var(--slate)]"
+        >
+          <span className="text-sm text-[var(--ink)]">No complaint to report</span>
+          <span
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${
+              isNoComplaint ? "bg-[var(--mint)]" : "bg-[var(--hairline)]"
+            }`}
+            style={{ transitionTimingFunction: "var(--ease)" }}
           >
-            <X size={20} />
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all duration-200 ${
+                isNoComplaint ? "left-[18px]" : "left-0.5"
+              }`}
+              style={{ transitionTimingFunction: "var(--ease)" }}
+            />
+          </span>
+        </button>
+
+        {/* Date */}
+        <Field label="Date" htmlFor="date">
+          <DatePicker
+            id="date"
+            selected={selectedDate}
+            onChange={handleDateChange}
+            dateFormat="dd-MM-yyyy"
+            className={fieldClass}
+            placeholderText="Select date"
+            disabled={!isAdmin}
+            wrapperClassName="w-full"
+          />
+        </Field>
+
+        {/* Building */}
+        <Field label="Building" htmlFor="building">
+          <SelectInput
+            id="building"
+            name="building"
+            onChange={handleChange}
+            value={formData.building}
+            required={isNoComplaint}
+            disabled={loading}
+          >
+            <option value="">Select building</option>
+            {Building.map((building) => (
+              <option key={building.id} value={building.name}>
+                {building.name}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+
+        {!isNoComplaint && (
+          <>
+            <Field label="Floor" htmlFor="floor">
+              <SelectInput
+                id="floor"
+                name="floor"
+                onChange={handleChange}
+                value={formData.floor}
+                disabled={loading}
+              >
+                <option value="">Select floor</option>
+                {Floor.map((floor) => (
+                  <option key={floor.id} value={floor.id}>
+                    {floor.name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+
+            <Field label="Complaint area" htmlFor="area">
+              <SelectInput
+                id="area"
+                name="area"
+                onChange={handleChange}
+                value={areas.find((a) => a.id.toString() === formData.area_id)?.area_name || ""}
+                disabled={loading}
+              >
+                <option value="">Select area</option>
+                {areas.map((area: Area) => (
+                  <option key={area.id} value={area.area_name}>
+                    {area.area_name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+
+            <Field label="Complaint type" htmlFor="complaintType">
+              <SelectInput
+                id="complaintType"
+                name="complaintType"
+                onChange={handleChange}
+                value={
+                  complaintTypes.find((t) => t.id.toString() === formData.complaint_type_id)
+                    ?.type_name || ""
+                }
+                disabled={loading}
+              >
+                <option value="">Select complaint type</option>
+                {complaintTypes.map((type: ComplaintType) => (
+                  <option key={type.id} value={type.type_name}>
+                    {type.type_name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+
+            <Field label="Details" htmlFor="details" className="relative">
+              <Textarea
+                id="details"
+                name="details"
+                value={formData.details}
+                onChange={handleChange}
+                placeholder="Describe the complaint"
+                rows={3}
+                disabled={loading}
+              />
+              {showDropdown && (
+                <div className="absolute z-10 max-h-32 w-full overflow-y-auto border border-[var(--hairline)] bg-[var(--card)] shadow-[0_8px_24px_rgba(14,17,22,0.12)]">
+                  {suggestions.map((item, index) => (
+                    <div
+                      key={index}
+                      className="cursor-pointer px-3 py-2 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--paper)]"
+                      onClick={() => handleSelectSuggestion(item)}
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Field>
+          </>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={loading}
+            className="border border-[var(--hairline)] px-4 py-2 text-sm text-[var(--slate)] transition-colors hover:text-[var(--ink)] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex items-center gap-2 bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.02] disabled:opacity-50"
+            style={{ transitionTimingFunction: "var(--ease)" }}
+          >
+            {loading && (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            )}
+            {loading ? "Working…" : editingComplaint ? "Update" : "Submit"}
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit} className="p-4">
-          {/* No Complaint Toggle */}
-          <div className="mb-4 flex items-center">
-            <input
-              type="checkbox"
-              id="noComplaint"
-              checked={isNoComplaint}
-              onChange={handleNoComplaintToggle}
-              className="mr-2 h-4 w-4 text-blue-600 rounded"
-            />
-            <label htmlFor="noComplaint" className="text-black font-medium">
-              No Complaint to Report
-            </label>
-          </div>
-
-          {/*Date Selection*/}
-          <div className="mb-4">
-            <label className="text-black block mb-1">Date:</label>
-            <DatePicker
-              selected={selectedDate}
-              onChange={handleDateChange}
-              dateFormat="dd-MM-yyyy"
-              className="border p-2 rounded text-black w-full"
-              placeholderText="Select date"
-              disabled={!isAdmin}
-            />
-          </div>
-
-          {/* Building Selection */}
-          <div className="mb-4">
-            <label className="text-black block mb-1">Building:</label>
-            <select 
-              name="building" 
-              onChange={handleChange} 
-              value={formData.building}
-              className="w-full p-2 border rounded text-black"
-              required={isNoComplaint}
-              disabled={loading}
-            >
-              <option value="">Select Building</option>
-              {Building.map(building => (
-                <option key={building.id} value={building.name}>{building.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Only show these fields if it's not a "No Complaint" */}
-          {!isNoComplaint && (
-            <>
-            {/* Floor Selection */}
-          <div className="mb-4">
-            <label className="text-black block mb-1">Floor:</label>
-            <select 
-              name="floor" 
-              onChange={handleChange} 
-              value={formData.floor}
-              className="w-full p-2 border rounded text-black"
-              required={isNoComplaint}
-              disabled={loading}
-            >
-              <option value="">Select Floor</option>
-                {Floor.map(floor => (
-                  <option key={floor.id} value={floor.id}>{floor.name}</option>
-                ))} 
-            </select>
-          </div>
-              {/* Complaint Area Selection */}
-              <div className="mb-4">
-                <label className="text-black block mb-1">Complaint Area:</label>
-                <select 
-                  name="area" 
-                  onChange={handleChange} 
-                  className="w-full p-2 border rounded text-black"
-                  value={areas.find(a => a.id.toString() === formData.area_id)?.area_name || ""}
-                  disabled={loading}
-                >
-                  <option value="">Select Area</option>
-                  {areas.map((area: Area) => (
-                    <option key={area.id} value={area.area_name}>
-                      {area.area_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Complaint Type Selection */}
-              <div className="mb-4">
-                <label className="text-black block mb-1">Complaint Type:</label>
-                <select 
-                  name="complaintType" 
-                  onChange={handleChange} 
-                  className="w-full p-2 border rounded text-black"
-                  value={complaintTypes.find(t => t.id.toString() === formData.complaint_type_id)?.type_name || ""}
-                  disabled={loading}
-                >
-                  <option value="">Select Complaint Type</option>
-                  {complaintTypes.map((type: ComplaintType) => (
-                    <option key={type.id} value={type.type_name}>
-                      {type.type_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Complaint Details */}
-              <div className="mb-4 relative">
-                <label className="text-black block mb-1">Complaint Details:</label>
-                <textarea
-                  name="details"
-                  value={formData.details}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded text-black"
-                  placeholder="Describe your complaint"
-                  rows={3}
-                  disabled={loading}
-                />
-                {showDropdown && (
-                  <div className="absolute z-10 border bg-white w-full max-h-32 overflow-y-auto shadow-md">
-                    {suggestions.map((item, index) => (
-                      <div
-                        key={index}
-                        className="p-2 hover:bg-gray-100 text-black cursor-pointer"
-                        onClick={() => handleSelectSuggestion(item)}
-                      >
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="flex gap-2 justify-end">
-            <button 
-              type="button" 
-              onClick={handleCancel}
-              className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
-            >
-              {loading ? 'Processing...' : (editingComplaint ? 'Update' : 'Submit')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

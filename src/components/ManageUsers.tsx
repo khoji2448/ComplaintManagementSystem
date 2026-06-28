@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { User, UserRoleType, Role } from "@/types/types";
+import { Plus, Check, Pencil, Trash2, Users as UsersIcon } from "lucide-react";
+import Panel from "@/components/ui/Panel";
+import Skeleton from "@/components/ui/Skeleton";
+import { Field, TextInput, SelectInput } from "@/components/ui/Field";
+import { notify } from "@/lib/toast";
 
 const prettyRole = (name: string) =>
   name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -12,30 +17,23 @@ interface NewUserForm {
   role: UserRoleType;
 }
 
+const emptyForm: NewUserForm = { name: "", email: "", password: "", role: "employee" };
+
 export default function ManageUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [newUser, setNewUser] = useState<NewUserForm>({
-    name: "",
-    email: "",
-    password: "",
-    role: "employee"
-  });
-  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState<NewUserForm>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const isEditing = editingId !== null;
 
   useEffect(() => {
     fetch("/api/users")
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setUsers(data);
-        } else {
-          setError("Failed to load users");
-        }
+        if (Array.isArray(data)) setUsers(data);
+        else setError("Failed to load users");
         setLoading(false);
       })
       .catch(() => {
@@ -51,396 +49,228 @@ export default function ManageUsers() {
       .catch(() => {});
   }, []);
 
-  const handleEditClick = (user: User) => {
-    setIsEditing(true);
+  const startEdit = (user: User) => {
     setEditingId(user.id);
-    // Set the user data in the add user form
-    setNewUser({
-      name: user.name,
-      email: user.email,
-      password: "", 
-      role: user.role
-    });
-    // Scroll to the form
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setForm({ name: user.name, email: user.email, password: "", role: user.role });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleCancelEdit = () => {
-    setIsEditing(false);
+  const cancelEdit = () => {
     setEditingId(null);
-    // Reset the form
-    setNewUser({
-      name: "",
-      email: "",
-      password: "",
-      role: "employee"
-    });
+    setForm(emptyForm);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isEditing) {
-      await updateUser(editingId!, newUser);
-    } else {
-      await addUser();
-    }
+    if (isEditing) await updateUser(editingId!, form);
+    else await addUser();
   };
 
-  const updateUser = async (id: number, updatedData: NewUserForm) => {
-    // Only include fields that are present
-    const dataToUpdate = {
-      name: updatedData.name,
-      email: updatedData.email,
-      role: updatedData.role,
-      ...(updatedData.password ? { password: updatedData.password } : {})
+  const updateUser = async (id: number, data: NewUserForm) => {
+    const payload = {
+      name: data.name,
+      email: data.email,
+      role: data.role,
+      ...(data.password ? { password: data.password } : {}),
     };
-
     const res = await fetch(`/api/users/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(dataToUpdate),
+      body: JSON.stringify(payload),
     });
-
     if (res.ok) {
-      const updatedUser = await res.json();
-      setUsers((prev) =>
-        prev.map((user) => (user.id === id ? { ...updatedUser } : user))
-      );
-      handleCancelEdit(); 
+      const updated = await res.json();
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...updated } : u)));
+      notify.success("User updated");
+      cancelEdit();
     } else {
-      const errorData = await res.json();
-      alert(`Failed to update user: ${errorData.error || 'Unknown error'}`);
+      const err = await res.json();
+      notify.error(`Couldn’t update user: ${err.error || "unknown error"}`);
     }
   };
 
   const deleteUser = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
-  
+    if (!confirm("Delete this user? This can’t be undone.")) return;
     const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
-  
     if (res.ok) {
-      setUsers((prev) => prev.filter((user) => user.id !== id));
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      if (editingId === id) cancelEdit();
+      notify.success("User deleted");
     } else {
-      alert("Failed to delete user");
+      notify.error("Couldn’t delete user");
     }
   };
-  
+
   const addUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password) {
-      alert("Name, email and password are required");
+    if (!form.name || !form.email || !form.password) {
+      notify.error("Name, email and password are required");
       return;
     }
-
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newUser),
+      body: JSON.stringify(form),
     });
-
     if (res.ok) {
-      const addedUser = await res.json();
-      setUsers((prev) => [...prev, { ...addedUser, }]);
-      setNewUser({ name: "", email: "", password: "", role: "employee" });
+      const added = await res.json();
+      setUsers((prev) => [...prev, { ...added }]);
+      setForm(emptyForm);
+      notify.success("User added");
     } else {
-      alert("Failed to add user");
+      notify.error("Couldn’t add user");
     }
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-white shadow-md rounded-md">
-      {loading ? (
-        <div className="text-center py-4">Loading users...</div>
-      ) : error ? (
-        <div className="text-red-500 text-center py-4">{error}</div>
-      ) : (
-        <>
-          <h2 className="text-xl text-black font-semibold mb-4">
-            {isEditing ? 'Edit User' : 'Add New User'}
-          </h2>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div>
+        <div className="font-mono-num text-[10px] uppercase tracking-[0.22em] text-[var(--mute)]">Manage users</div>
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] md:text-3xl">Users</h1>
+      </div>
 
-          {/* Add/Edit User Form */}
-          <form onSubmit={handleSubmit} className="mb-6">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
-              <input
+      {error && (
+        <div className="border border-[var(--signal)] bg-[var(--signal-soft)] p-4 text-sm text-[var(--ink)]">{error}</div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start">
+        {/* left: add / edit form */}
+        <div className="lg:sticky lg:top-8">
+          <Panel title={isEditing ? "Edit user" : "Add user"}>
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 gap-3">
+            <Field label="Name" htmlFor="u_name">
+              <TextInput id="u_name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
+            </Field>
+            <Field label="Email" htmlFor="u_email">
+              <TextInput id="u_email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email" />
+            </Field>
+            <Field label="Password" htmlFor="u_pass">
+              <TextInput
+                id="u_pass"
                 type="text"
-                placeholder="Name"
-                value={newUser.name}
-                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                className="border text-black border-gray-300 rounded-md p-2"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder={isEditing ? "New password (optional)" : "Password"}
               />
-              <input
-                type="text"
-                placeholder="Email"
-                value={newUser.email}
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                className="border text-black border-gray-300 rounded-md p-2"
-              />
-              <input
-                type="text"
-                placeholder={isEditing ? "New Password (optional)" : "Password"}
-                value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                className="border text-black border-gray-300 rounded-md p-2"
-              />
-              <select
-                value={newUser.role}
-                onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserRoleType })}
-                className="border text-black border-gray-300 rounded-md p-2"
-              >
+            </Field>
+            <Field label="Role" htmlFor="u_role">
+              <SelectInput id="u_role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRoleType })}>
                 {roles.map((role) => (
                   <option key={role.id} value={role.name}>
                     {prettyRole(role.name)}
                   </option>
                 ))}
-              </select>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
-                >
-                  {isEditing ? 'Update User' : 'Add User'}
-                </button>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={handleCancelEdit}
-                    className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </div>
-          </form>
-
-          {/* Users Table */}
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-auto">
-              <thead>
-                <tr className="bg-gray-200">
-                  <th className="border text-black border-gray-300 px-4 py-2">Name</th>
-                  <th className="border text-black border-gray-300 px-4 py-2">Username</th>
-                  <th className="border text-black border-gray-300 px-4 py-2">Password</th>
-                  <th className="border text-black border-gray-300 px-4 py-2">Role</th>
-                  <th className="border text-black border-gray-300 px-4 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id} className="text-center">
-                    <td className="border text-black border-gray-300 px-4 py-2">
-                      {editingUser?.id === user.id ? (
-                        <input
-                          type="text"
-                          value={editingUser.name}
-                          onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                      ) : (
-                        user.name
-                      )}
-                    </td>
-                    <td className="border text-black border-gray-300 px-4 py-2">
-                      {editingUser?.id === user.id ? (
-                        <input
-                          type="text"
-                          value={editingUser.email}
-                          onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                      ) : (
-                        user.email
-                      )}
-                    </td>
-                    <td className="border text-black border-gray-300 px-4 py-2">
-                      {editingUser?.id === user.id ? (
-                        <input
-                          type="password"
-                          value={editingUser.password}
-                          onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                          className="w-full border rounded px-2 py-1"
-                        />
-                      ) : (
-                        user.password
-                      )}
-                    </td>
-                    <td className="border text-black border-gray-300 px-4 py-2">
-                      {editingUser?.id === user.id ? (
-                        <select
-                          className="border text-black border-gray-300 rounded-md p-1 w-auto"
-                          value={editingUser.role}
-                          onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRoleType })}
-                        >
-                          {roles.map((role) => (
-                            <option key={role.id} value={role.name}>
-                              {prettyRole(role.name)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        // Convert role to capitalized text
-                        user.role.charAt(0).toUpperCase() + user.role.slice(1)
-                      )}
-                    </td>
-                    <td className="border text-black border-gray-300 px-4 py-2">
-                      <div className="flex gap-2 justify-center">
-                        {editingUser?.id === user.id ? (
-                          <>
-                            <button
-                              className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600"
-                              onClick={() => updateUser(user.id, {
-                                name: editingUser.name,
-                                email: editingUser.email,
-                                password: editingUser.password || "", // Provide empty string as fallback
-                                role: editingUser.role
-                              })}
-                            >
-                              Save
-                            </button>
-                            <button
-                              className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600"
-                              onClick={handleCancelEdit}
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              className="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600"
-                              onClick={() => handleEditClick(user)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
-                              onClick={() => deleteUser(user.id)}
-                            >
-                              Delete
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              </SelectInput>
+            </Field>
           </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1.5 bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.02]"
+              style={{ transitionTimingFunction: "var(--ease)" }}
+            >
+              {isEditing ? <Check size={15} /> : <Plus size={15} />}
+              {isEditing ? "Update user" : "Add user"}
+            </button>
+            {isEditing && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="border border-[var(--hairline)] px-4 py-2 text-sm text-[var(--slate)] transition-colors hover:text-[var(--ink)]"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+            </form>
+          </Panel>
+        </div>
 
-          {/* Card view for mobile */}
-          <div className="md:hidden space-y-4">
-            {users.map((user) => (
-              <div key={user.id} className="border text-black border-gray-300 rounded-lg p-4 space-y-3">
-                {editingUser?.id === user.id ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Name</label>
-                      <input
-                        type="text"
-                        value={editingUser.name}
-                        onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                        className="w-full border rounded px-2 py-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Username</label>
-                      <input
-                        type="text"
-                        value={editingUser.email}
-                        onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                        className="w-full border rounded px-2 py-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Password</label>
-                      <input
-                        type="text"
-                        value={editingUser.password || ''}
-                        onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                        className="w-full border rounded px-2 py-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Role</label>
-                      <select
-                        className="w-full border rounded px-2 py-1"
-                        value={editingUser.role}
-                        onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRoleType })}
-                      >
-                        {roles.map((role) => (
-                          <option key={role.id} value={role.name}>
-                            {prettyRole(role.name)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 flex-1"
-                        onClick={() => updateUser(user.id, {
-                          name: editingUser.name,
-                          email: editingUser.email,
-                          password: editingUser.password || "", // Provide empty string as fallback
-                          role: editingUser.role
-                        })}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 flex-1"
-                        onClick={handleCancelEdit}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium text-black">{user.name}</h3>
-                      <div className="flex gap-2">
-                        <button
-                          className="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600"
-                          onClick={() => handleEditClick(user)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
-                          onClick={() => deleteUser(user.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                    <div className="text-black">Username: {user.email}</div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-black">Role:</span>
-                      <select
-                        className="border text-black border-gray-300 rounded-md p-1 flex-grow"
-                        value={user.role}
-                        onChange={(e) => updateUser(user.id, {
-                          name: user.name,
-                          email: user.email,
-                          password: "", // Add an empty password to trigger update
-                          role: e.target.value as UserRoleType
-                        })}
-                      >
-                        {roles.map((role) => (
-                          <option key={role.id} value={role.name}>
-                            {prettyRole(role.name)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </div>
+        {/* right: list */}
+        <Panel title="All users" action={!loading ? <span className="font-mono-num text-xs text-[var(--slate)]">{users.length}</span> : undefined}>
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 w-full" />
             ))}
           </div>
-        </>
-      )}
+        ) : users.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <UsersIcon size={32} strokeWidth={1.25} className="text-[var(--mute)]" />
+            <p className="mt-3 text-sm text-[var(--slate)]">No users yet.</p>
+          </div>
+        ) : (
+          <>
+            {/* desktop table */}
+            <div className="hidden md:block">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--hairline)] text-left">
+                    {["Name", "Email", "Password", "Role", "Actions"].map((h, i) => (
+                      <th key={i} className="pb-2.5 pr-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--ink)]">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user, i) => (
+                    <tr
+                      key={user.id}
+                      className="animate-rise border-b border-[var(--hairline)] transition-colors duration-150 hover:bg-[var(--paper)]"
+                      style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
+                    >
+                      <td className="py-3 pr-4 text-sm font-medium">{user.name}</td>
+                      <td className="py-3 pr-4 text-sm text-[var(--slate)]">{user.email}</td>
+                      <td className="py-3 pr-4 font-mono-num text-xs text-[var(--slate)]">{user.password}</td>
+                      <td className="py-3 pr-4 text-sm">{prettyRole(user.role)}</td>
+                      <td className="py-3">
+                        <div className="flex gap-1">
+                          <button onClick={() => startEdit(user)} aria-label="Edit" className="p-1.5 text-[var(--slate)] transition-colors hover:text-[var(--ink)]">
+                            <Pencil size={15} />
+                          </button>
+                          <button onClick={() => deleteUser(user.id)} aria-label="Delete" className="p-1.5 text-[var(--slate)] transition-colors hover:text-[var(--signal)]">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* mobile cards */}
+            <div className="space-y-3 md:hidden">
+              {users.map((user, i) => (
+                <div
+                  key={user.id}
+                  className="animate-rise border border-[var(--hairline)] bg-[var(--paper)] p-4"
+                  style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium text-[var(--ink)]">{user.name}</h3>
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(user)} aria-label="Edit" className="p-1.5 text-[var(--slate)] hover:text-[var(--ink)]">
+                        <Pencil size={15} />
+                      </button>
+                      <button onClick={() => deleteUser(user.id)} aria-label="Delete" className="p-1.5 text-[var(--slate)] hover:text-[var(--signal)]">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--slate)]">{user.email}</p>
+                  <p className="mt-1 font-mono-num text-xs text-[var(--slate)]">
+                    <span className="text-[var(--mute)]">Password: </span>{user.password}
+                  </p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[var(--mute)]">{prettyRole(user.role)}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        </Panel>
+      </div>
     </div>
   );
 }

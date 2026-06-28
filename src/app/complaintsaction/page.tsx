@@ -1,16 +1,5 @@
-import ComplaintActionTable from '@/components/ComplaintActionTable'
-import React from 'react'
+import ComplaintActionTable from "@/components/ComplaintActionTable";
 
-const Complaints = () => {
-  return (
-    <div className="flex">
-    <div className="flex-1">
-      <main className="p-4">
-        <ComplaintActionTable />
-      </main>
-    </div>
-  </div>
-  )
+export default function ComplaintsActionPage() {
+  return <ComplaintActionTable />;
 }
-
-export default Complaints

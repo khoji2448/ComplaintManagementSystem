@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Field, TextInput } from "@/components/ui/Field";
 
 // Resolve where to send the user after login: the originally requested page
 // (callbackUrl), falling back to "/" which itself routes to their landing page.
@@ -23,7 +25,6 @@ export default function LoginPage() {
   const router = useRouter();
   const { status } = useSession();
 
-  // Already signed in? Don't show the form — go straight through.
   useEffect(() => {
     if (status === "authenticated") {
       router.replace(resolveDestination());
@@ -36,12 +37,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-
+      const result = await signIn("credentials", { email, password, redirect: false });
       if (result?.error) {
         setError(result.error);
         return;
@@ -51,94 +47,106 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.error("Login error:", error);
-      setError("An error occurred during login");
+      setError("Something went wrong. Try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center">
-      {/* Background Image */}
-      <div className="absolute inset-0">
-        <Image
-          src="/images/banner.jpg"
-          alt="Background"
-          fill
-          className="object-cover w-full h-full"
-          priority
-          quality={100}
-        />
-        <div className="absolute inset-0 bg-black/50" />
+    <div className="grid min-h-screen md:grid-cols-[55%_45%]">
+      {/* cinematic panel */}
+      <div className="relative hidden md:block">
+        <Image src="/images/banner.jpg" alt="" fill priority quality={100} className="object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+        <div className="absolute inset-0 flex flex-col justify-between p-12">
+          <div className="font-mono-num text-[11px] uppercase tracking-[0.28em] text-white/70">
+            Brick School · CMS
+          </div>
+          <div>
+            <h1
+              className="font-display font-bold leading-[0.95] tracking-[-0.03em] text-white"
+              style={{ fontSize: "clamp(2.5rem, 4vw, 4rem)" }}
+            >
+              Every complaint,
+              <br />
+              accounted for.
+            </h1>
+            <p className="mt-4 max-w-sm text-sm leading-[1.6] text-white/70">
+              Log it, track it, close it. The console keeps the whole building honest.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Login Form */}
-      <div className="w-full max-w-md mx-4 z-10">
-        <div className="bg-white/90 backdrop-blur-sm p-6 rounded-lg shadow-2xl">
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-6">
-            Login to CMS
-          </h2>
-          
+      {/* form panel */}
+      <div className="flex items-center justify-center bg-[var(--paper)] px-6 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <div className="font-mono-num text-[10px] uppercase tracking-[0.22em] text-[var(--mute)]">Welcome back</div>
+            <h2 className="font-display text-2xl font-bold tracking-[-0.02em] text-[var(--ink)]">Sign in</h2>
+          </div>
+
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            <div className="mb-5 border border-[var(--signal)] bg-[var(--signal-soft)] px-3 py-2.5 text-sm text-[var(--ink)]">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Username
-              </label>
-              <input
+            <Field label="Username" htmlFor="email">
+              <TextInput
+                id="email"
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                placeholder="Your username"
                 required
                 disabled={isLoading}
+                className="bg-[var(--card)]"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
+            <Field label="Password" htmlFor="password">
               <div className="relative">
-                <input
+                <TextInput
+                  id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 pr-10"
+                  placeholder="Your password"
                   required
                   disabled={isLoading}
+                  className="bg-[var(--card)] !pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
                   disabled={isLoading}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--mute)] transition-colors hover:text-[var(--ink)]"
                 >
-                  {showPassword ? "Hide" : "Show"}
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
-            </div>
+            </Field>
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading}
+              className="group flex w-full items-center justify-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
+              style={{ transitionTimingFunction: "var(--ease)" }}
             >
               {isLoading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Logging in...
-                </span>
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Signing in…
+                </>
               ) : (
-                "Login"
+                <>
+                  Sign in
+                  <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-0.5" style={{ transitionTimingFunction: "var(--ease)" }} />
+                </>
               )}
             </button>
           </form>

@@ -1,16 +1,5 @@
-import Reports from '@/components/Reports'
-import React from 'react'
+import Reports from "@/components/Reports";
 
-const page = () => {
-  return (
-    <div className="flex">
-        <div className="flex-1">
-            <main>
-                <Reports/>
-            </main>
-        </div>
-    </div>
-  )
+export default function ReportsPage() {
+  return <Reports />;
 }
-
-export default page

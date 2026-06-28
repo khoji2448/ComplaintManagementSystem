@@ -1,10 +1,5 @@
-import ManageComplaintTypes from '@/components/ManageComplaintTypes'
-import React from 'react'
+import ManageComplaintTypes from "@/components/ManageComplaintTypes";
 
-const ComplaintType = () => {
-  return (
-    <ManageComplaintTypes/>
-  )
+export default function ManageComplaintTypesPage() {
+  return <ManageComplaintTypes />;
 }
-
-export default ComplaintType

@@ -2,7 +2,16 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';   
+import { useSession } from 'next-auth/react';
+import { ArrowUpRight, Inbox, Plus } from 'lucide-react';
+import CountUp from '@/components/ui/CountUp';
+import StatCard from '@/components/ui/StatCard';
+import Sparkline from '@/components/ui/Sparkline';
+import DonutChart, { DonutSlice } from '@/components/ui/DonutChart';
+import ActivityChart from '@/components/ui/ActivityChart';
+import Skeleton from '@/components/ui/Skeleton';
+import Panel from '@/components/ui/Panel';
+import StatusPill, { statusColor } from '@/components/ui/StatusPill';
 
 // Types aligned with our /api/reports and /api/dashboard responses
 interface Complaint {
@@ -44,18 +53,25 @@ interface DashboardData {
   recent: Complaint[];
 }
 
-function KPICard({ label, value, accent = 'indigo' }: { label: string; value: number | string; accent?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'sky' }) {
-  const accentClasses = {
-    indigo: 'from-indigo-50 to-white text-indigo-700 border-indigo-100',
-    emerald: 'from-emerald-50 to-white text-emerald-700 border-emerald-100',
-    rose: 'from-rose-50 to-white text-rose-700 border-rose-100',
-    amber: 'from-amber-50 to-white text-amber-700 border-amber-100',
-    sky: 'from-sky-50 to-white text-sky-700 border-sky-100',
-  } as const;
+// Categorical palette for complaint types (warm/cool spread off the tokens).
+const typePalette = ['#0fb981', '#f59e0b', '#0e1116', '#5a93f5', '#a855f7', '#ef6f6f', '#14b8c4', '#9aa3af'];
+
+function DashboardSkeleton() {
   return (
-    <div className={`rounded-lg border ${accentClasses[accent]} bg-gradient-to-br p-4 md:p-5 shadow-sm`}> 
-      <div className="text-xs md:text-sm text-gray-500">{label}</div>
-      <div className="mt-1 text-xl md:text-3xl font-bold">{value}</div>
+    <div className="space-y-6">
+      <Skeleton className="h-5 w-48" />
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Skeleton className="h-44 lg:col-span-3" />
+        <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[88px]" />)}
+        </div>
+      </div>
+      <Skeleton className="h-[320px]" />
+      <div className="grid gap-6 lg:grid-cols-5">
+        <Skeleton className="h-64 lg:col-span-3" />
+        <Skeleton className="h-64 lg:col-span-2" />
+      </div>
+      <Skeleton className="h-72" />
     </div>
   );
 }
@@ -93,128 +109,161 @@ export default function DashboardPage() {
 
   const statusList = useMemo(() => metrics?.series.byStatus ?? [], [metrics]);
   const typeList = useMemo(() => metrics?.series.byType ?? [], [metrics]);
+  const dateSeries = useMemo(() => metrics?.series.byDate ?? [], [metrics]);
+  const sparkData = useMemo(() => dateSeries.map((d) => d.value), [dateSeries]);
+  const statusSlices = useMemo<DonutSlice[]>(
+    () => statusList.map((s) => ({ key: s.key, value: s.value, color: statusColor(s.key) })),
+    [statusList]
+  );
+  const typeSlices = useMemo<DonutSlice[]>(() => {
+    const top = [...typeList].sort((a, b) => b.value - a.value);
+    const head = top.slice(0, 6);
+    const rest = top.slice(6);
+    const slices = head.map((t, i) => ({ key: t.key, value: t.value, color: typePalette[i % typePalette.length] }));
+    const restSum = rest.reduce((acc, t) => acc + t.value, 0);
+    if (restSum > 0) slices.push({ key: 'Other', value: restSum, color: typePalette[7] });
+    return slices;
+  }, [typeList]);
 
-  if (loading) {
-    return <div className="p-4 md:p-6">Loading dashboard...</div>;
-  }
+  const today = new Date().toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  if (loading) return <DashboardSkeleton />;
 
   if (error) {
-    return <div className="p-4 md:p-6 text-red-600">{error}</div>;
+    return (
+      <div className="border border-[var(--signal)] bg-[var(--signal-soft)] p-5 text-sm text-[var(--ink)]">
+        Couldn’t load the console. {error}
+      </div>
+    );
   }
 
+  const counts = metrics?.counts;
+  const hasData = (counts?.total ?? 0) > 0;
+
   return (
-    <div className="container mx-auto p-3 sm:p-4 md:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
-        <div className="text-sm text-gray-500">Overview</div>
+    <div className="space-y-6">
+      {/* eyebrow row */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] md:text-3xl">Dashboard</h1>
+        </div>
+        {session?.user?.permissions?.includes('reports:view') && (
+          <Link
+            href="/reports"
+            className="group inline-flex items-center gap-1.5 border border-[var(--hairline)] bg-[var(--card)] px-4 py-2 text-sm text-[var(--slate)] transition-colors hover:text-[var(--ink)]"
+          >
+            Full reports
+            <ArrowUpRight size={15} className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" style={{ transitionTimingFunction: 'var(--ease)' }} />
+          </Link>
+        )}
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <KPICard label="Total Complaints" value={metrics?.counts.total ?? 0} accent="indigo" />
-        <KPICard label="Complaints (This Month)" value={metrics?.counts.createdThisMonth ?? 0} accent="amber" />
-        <KPICard label="In-Progress" value={metrics?.counts.inProgress ?? 0} accent="sky" />
-        <KPICard label="Resolved (This Month)" value={metrics?.counts.resolvedThisMonth ?? 0} accent="emerald" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mt-4 md:mt-6">
-        {/* Breakdown by status */}
-        <div className="rounded-lg border bg-white p-4 md:p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg">By Status</h2>
-            <span className="text-xs text-gray-500">Count</span>
-          </div>
-          <ul className="mt-3 space-y-2">
-            {statusList.map((s) => (
-              <li key={s.key} className="flex items-center justify-between text-sm">
-                <span className="text-gray-700">{s.key}</span>
-                <span className="font-semibold">{s.value}</span>
-              </li>
-            ))}
-            {statusList.length === 0 && (
-              <li className="text-sm text-gray-500">No data</li>
-            )}
-          </ul>
+      {!hasData ? (
+        // empty state
+        <div className="flex flex-col items-center justify-center border border-dashed border-[var(--hairline)] bg-[var(--card)] py-20 text-center">
+          <Inbox size={40} strokeWidth={1.25} className="text-[var(--mute)]" />
+          <p className="mt-4 font-display text-lg font-semibold">Nothing’s broken. Yet.</p>
+          <p className="mt-1 text-sm text-[var(--slate)]">No complaints on record. When one lands, it shows up here.</p>
+          {session?.user?.permissions?.includes('complaints:create') && (
+            <Link href="/complaintentry" className="mt-5 inline-flex items-center gap-1.5 bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.02]" style={{ transitionTimingFunction: 'var(--ease)' }}>
+              <Plus size={15} /> Log a complaint
+            </Link>
+          )}
         </div>
-
-        {/* Breakdown by type */}
-        <div className="rounded-lg border bg-white p-4 md:p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg">By Type</h2>
-            <span className="text-xs text-gray-500">Count</span>
-          </div>
-          <ul className="mt-3 space-y-2">
-            {typeList.map((t) => (
-              <li key={t.key} className="flex items-center justify-between text-sm">
-                <span className="text-gray-700">{t.key}</span>
-                <span className="font-semibold">{t.value}</span>
-              </li>
-            ))}
-            {typeList.length === 0 && (
-              <li className="text-sm text-gray-500">No data</li>
-            )}
-          </ul>
-        </div>
-
-        {/* Meta */}
-        <div className="rounded-lg border bg-white p-4 md:p-5 shadow-sm">
-          <h2 className="font-semibold text-lg">Summary</h2>
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-700">Unseen complaints</span>
-              <span className="font-semibold">{metrics?.counts.unseen ?? 0}</span>
+      ) : (
+        <>
+          {/* hero + KPIs */}
+          <div className="grid gap-4 lg:grid-cols-5">
+            {/* hero stat */}
+            <div className="animate-rise flex flex-col justify-between border border-[var(--hairline)] bg-[var(--card)] p-6 shadow-[0_1px_2px_rgba(14,17,22,0.04)] lg:col-span-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--slate)]">
+                Open right now
+              </div>
+              <div className="mt-2 flex items-end justify-between gap-4">
+                <div className="font-mono-num font-semibold leading-none tracking-[-0.02em] text-[var(--ink)]" style={{ fontSize: 'clamp(3rem, 7vw, 5.5rem)' }}>
+                  <CountUp value={counts?.open ?? 0} />
+                </div>
+                {sparkData.length > 1 && (
+                  <div className="mb-2 hidden sm:block">
+                    <div className="mb-1 text-right text-[10px] uppercase tracking-[0.14em] text-[var(--mute)]">30-day trend</div>
+                    <Sparkline data={sparkData} width={160} height={40} />
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--slate)]">
+                <span><span className="font-mono-num font-semibold text-[var(--ink)]">{counts?.total ?? 0}</span> all time</span>
+                <span><span className="font-mono-num font-semibold text-[var(--signal)]">{counts?.inProgress ?? 0}</span> in progress</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-700">Avg. resolution (days)</span>
-              <span className="font-semibold">{metrics?.avgResolutionDays ?? 0}</span>
-            </div>
-            {session?.user?.permissions?.includes("reports:view") ? (
-            <Link href="/reports" className="inline-flex text-indigo-600 hover:underline mt-2">View detailed reports →</Link>
-            ) : null}
-          </div>
-        </div>
-      </div>
 
-      {/* Recent complaints */}
-      <div className="rounded-lg border bg-white p-4 md:p-5 shadow-sm mt-4 md:mt-6">
-        <div className="mb-3 md:mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-lg">Recent Complaints</h2>
-          {session?.user?.permissions?.includes("complaints:action") ? (
-            <Link href="/complaintsaction" className="text-sm text-indigo-600 hover:underline">Manage →</Link>
-          ) : null}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] border">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="border p-2 md:p-3 text-left text-xs md:text-sm">Date</th>
-                <th className="border p-2 md:p-3 text-left text-xs md:text-sm">Building</th>
-                <th className="border p-2 md:p-3 text-left text-xs md:text-sm">Floor</th>
-                <th className="border p-2 md:p-3 text-left text-xs md:text-sm">Area</th>
-                <th className="border p-2 md:p-3 text-left text-xs md:text-sm">Type</th>
-                <th className="border p-2 md:p-3 text-left text-xs md:text-sm">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((c) => (
-                <tr key={c.id} className="border">
-                  <td className="border p-2 md:p-3 text-xs md:text-sm whitespace-nowrap">{new Date(c.date).toDateString()}</td>
-                  <td className="border p-2 md:p-3 text-xs md:text-sm">{c.building}</td>
-                  <td className="border p-2 md:p-3 text-xs md:text-sm">{c.floor}</td>
-                  <td className="border p-2 md:p-3 text-xs md:text-sm">{c.area_id ? c.area_name : 'Deleted Area'}</td>
-                  <td className="border p-2 md:p-3 text-xs md:text-sm">{c.complaint_type_id ? c.complaint_type_name : 'Deleted Type'}</td>
-                  <td className={`border p-2 md:p-3 text-xs md:text-sm ${c.status === 'Resolved' ? 'text-green-700' : c.status === 'In-Progress' ? 'text-amber-700' : 'text-gray-700'}`}>{c.status}</td>
-                </tr>
-              ))}
-              {recent.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-4 text-center text-sm text-gray-500">No recent complaints</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            {/* secondary KPIs */}
+            <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+              <StatCard label="This month" value={counts?.createdThisMonth ?? 0} delay={80} />
+              <StatCard label="Resolved (mo.)" value={counts?.resolvedThisMonth ?? 0} tone="mint" delay={160} />
+              <StatCard label="Turnaround (days)" value={metrics?.avgResolutionDays ?? 0} decimals={1} delay={240} />
+              <StatCard label="Waiting on a human" value={counts?.unseen ?? 0} tone="signal" alert delay={320} />
+            </div>
+          </div>
+
+          {/* activity chart — signature */}
+          <Panel title="Activity · daily volume">
+            <ActivityChart data={dateSeries} />
+          </Panel>
+
+          {/* breakdowns */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Panel title="By status">
+              <DonutChart data={statusSlices} />
+            </Panel>
+            <Panel title="By type">
+              <DonutChart data={typeSlices} />
+            </Panel>
+          </div>
+
+          {/* recent complaints */}
+          <Panel
+            title="Recent complaints"
+            action={session?.user?.permissions?.includes('complaints:action') ? (
+              <Link href="/complaintsaction" className="inline-flex items-center gap-1 text-xs font-medium text-[var(--slate)] transition-colors hover:text-[var(--ink)]">
+                Manage <ArrowUpRight size={13} />
+              </Link>
+            ) : undefined}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--hairline)] text-left">
+                    {['Date', 'Building', 'Floor', 'Area', 'Type', 'Status'].map((h) => (
+                      <th key={h} className="pb-2.5 pr-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--mute)]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((c, i) => (
+                    <tr
+                      key={c.id}
+                      className="animate-rise border-b border-[var(--hairline)] transition-colors duration-150 hover:bg-[var(--paper)]"
+                      style={{ animationDelay: `${i * 50}ms` }}
+                    >
+                      <td className="py-3 pr-4 font-mono-num text-xs whitespace-nowrap text-[var(--slate)]">{new Date(c.date).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td className="py-3 pr-4 text-sm">{c.building}</td>
+                      <td className="py-3 pr-4 text-sm">{c.floor}</td>
+                      <td className="py-3 pr-4 text-sm">{c.area_id ? c.area_name : <span className="text-[var(--mute)]">Deleted area</span>}</td>
+                      <td className="py-3 pr-4 text-sm">{c.complaint_type_id ? c.complaint_type_name : <span className="text-[var(--mute)]">Deleted type</span>}</td>
+                      <td className="py-3 pr-4"><StatusPill status={c.status} /></td>
+                    </tr>
+                  ))}
+                  {recent.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-sm text-[var(--mute)]">No recent complaints</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </>
+      )}
     </div>
   );
 }

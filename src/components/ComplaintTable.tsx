@@ -3,7 +3,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Complaint, User } from "@/types/types";
 import { useSession } from "next-auth/react";
 import ComplaintForm from "./ComplaintForm";
-import { Plus } from 'lucide-react';
+import { Plus, Pencil, Trash2, ClipboardCheck } from "lucide-react";
+import Panel from "@/components/ui/Panel";
+import StatusPill from "@/components/ui/StatusPill";
+import Skeleton from "@/components/ui/Skeleton";
+import { Field, SelectInput } from "@/components/ui/Field";
+import { notify } from "@/lib/toast";
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 
 export default function ComplaintTable() {
   const { data: session } = useSession();
@@ -13,9 +21,9 @@ export default function ComplaintTable() {
   const [loading, setLoading] = useState(true);
   const [editingComplaint, setEditingComplaint] = useState<Complaint | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [filters, setFilters] = useState({
-    user_id: ''
-  });
+  const [filters, setFilters] = useState({ user_id: "" });
+
+  const isAdmin = session?.user?.role === "admin";
 
   const fetchComplaints = async () => {
     try {
@@ -24,7 +32,7 @@ export default function ComplaintTable() {
       setComplaints(data);
       setFilteredComplaints(data);
     } catch (error) {
-      alert('Error fetching complaints' + error);
+      notify.error("Couldn’t load complaints: " + error);
     } finally {
       setLoading(false);
     }
@@ -34,17 +42,15 @@ export default function ComplaintTable() {
     setLoading(true);
     try {
       const response = await fetch(`/api/users`);
-      if (!response.ok) {
-        throw new Error(`Error fetching users: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`Error fetching users: ${response.statusText}`);
       const data = await response.json();
       setUsers(data);
     } catch (error) {
-      alert('Error fetching types: ' + error);
+      notify.error("Couldn’t load users: " + error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -57,23 +63,20 @@ export default function ComplaintTable() {
       fetchUsers();
     };
 
-    window.addEventListener('newComplaint', handleNewComplaint);
-    return () => {
-      window.removeEventListener('newComplaint', handleNewComplaint);
-    };
+    window.addEventListener("newComplaint", handleNewComplaint);
+    return () => window.removeEventListener("newComplaint", handleNewComplaint);
   }, [session]);
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this complaint?')) {
+    if (window.confirm("Delete this complaint? This can’t be undone.")) {
       try {
-        const response = await fetch(`/api/complaints/${id}`, {
-          method: 'DELETE',
-        });
+        const response = await fetch(`/api/complaints/${id}`, { method: "DELETE" });
         if (response.ok) {
+          notify.success("Complaint deleted");
           fetchComplaints();
         }
       } catch (error) {
-        alert('Error deleting complaint' + error);
+        notify.error("Couldn’t delete complaint: " + error);
       }
     }
   };
@@ -90,14 +93,13 @@ export default function ComplaintTable() {
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFilters(prev => ({ ...prev, [name]: value }));
+    setFilters((prev) => ({ ...prev, [name]: value }));
   };
 
   const applyFilters = useCallback(() => {
-    let filtered = complaints.filter(complaint => complaint.status === "In-Progress");
-
+    let filtered = complaints.filter((complaint) => complaint.status === "In-Progress");
     if (filters.user_id) {
-      filtered = filtered.filter(report => report.user_id === parseInt(filters.user_id));
+      filtered = filtered.filter((report) => report.user_id === parseInt(filters.user_id));
     }
     setFilteredComplaints(filtered);
   }, [filters, complaints]);
@@ -106,23 +108,25 @@ export default function ComplaintTable() {
     applyFilters();
   }, [applyFilters]);
 
-  if (loading) {
-    return <div className="text-black">Loading...</div>;
-  }
-
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-black">Complaints</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={handleAddClick}
-            className="flex items-center bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            <Plus size={16} className="mr-1" />
-            Add New Complaint
-          </button>
+    <div className="space-y-6">
+      {/* header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-mono-num text-[10px] uppercase tracking-[0.22em] text-[var(--mute)]">
+            Complaint entry
+          </div>
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] md:text-3xl">
+            Open complaints
+          </h1>
         </div>
+        <button
+          onClick={handleAddClick}
+          className="inline-flex items-center gap-1.5 bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white transition-transform duration-300 hover:scale-[1.02]"
+          style={{ transitionTimingFunction: "var(--ease)" }}
+        >
+          <Plus size={16} /> New complaint
+        </button>
       </div>
 
       <ComplaintForm
@@ -133,139 +137,172 @@ export default function ComplaintTable() {
         refreshComplaints={fetchComplaints}
       />
 
-      <div className="bg-white p-4 shadow rounded overflow-x-auto">
-        <h3 className="text-lg text-black font-bold mb-2">Your Complaints</h3>
-        {session?.user?.role === "admin" && (
-          <div className="flex flex-col gap-1">
-            <label className="block text-black text-sm md:text-base">Submitted By:</label>
-            <select name="user_id" value={filters.user_id} onChange={handleFilterChange} className="border p-2 md:p-2.5 text-black w-full">
-              <option value="">All Users</option>
-              {users.map(user => (
-                <option key={user.id} value={user.id}>{user.name}</option>
-              ))}
-            </select>
+      <Panel title="Your complaints">
+        {isAdmin && (
+          <div className="mb-5 max-w-xs">
+            <Field label="Submitted by" htmlFor="user_id">
+              <SelectInput id="user_id" name="user_id" value={filters.user_id} onChange={handleFilterChange}>
+                <option value="">All users</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
           </div>
         )}
-        <div className="min-w-full">
-          {/* Desktop View */}
-          <table className="w-full border hidden md:table">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border text-black p-2">Date</th>
-                {session?.user?.role === "admin" && (
-                  <th className="border text-black p-2">Submitted By</th>
-                )}
-                <th className="border text-black p-2">Building</th>
-                <th className="border text-black p-2">Floor</th>
-                <th className="border text-black p-2">Area</th>
-                <th className="border text-black p-2">Type</th>
-                <th className="border text-black p-2">Details</th>
-                <th className="border text-black p-2">Status</th>
-                <th className="border text-black p-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredcomplaints.map((complaint) => (
-                <tr key={complaint.id} className="border">
-                  <td className="border text-black p-2">{new Date(complaint.date).toDateString()}</td>
-                  {session?.user?.role === "admin" && (
-                    <td className="border text-black p-2">{users.find(user => user.id === complaint.user_id)?.name}</td>
-                  )}
-                  <td className="border text-black p-2">{complaint.building}</td>
-                  <td className="border text-black p-2">{complaint.floor}</td>
-                  <td className="border text-black p-2">{complaint.area_name}</td>
-                  <td className="border text-black p-2">{complaint.complaint_type_name}</td>
-                  <td className="border text-black p-2">{complaint.details}</td>
-                  <td className={`border text-black p-2 ${complaint.status === "In-Progress" ? "bg-red-200" : ""}`}>{complaint.status}</td>
-                  <td className="border text-black p-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditClick(complaint)}
-                        className="bg-blue-500 text-white px-2 py-1 rounded text-sm"
-                      >
-                        Edit
-                      </button>
-                      {session?.user.role === "admin" && (
-                        <button
-                          onClick={() => handleDelete(complaint.id)}
-                          className="bg-red-500 text-white px-2 py-1 rounded text-sm"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
 
-          {/* Mobile View */}
-          <div className="md:hidden space-y-4">
-            {filteredcomplaints.map((complaint) => (
-              <div key={complaint.id} className="border text-black rounded-lg p-4 bg-gray-50">
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div>
-                    <p className="font-semibold text-sm text-black">Date</p>
-                    <p>{new Date(complaint.date).toDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-black">Building</p>
-                    <p>{complaint.building}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-black">Floor</p>
-                    <p>{complaint.floor}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-black">Area</p>
-                    <p>{complaint.area_name}</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-black">Type</p>
-                    <p>{complaint.complaint_type_name}</p>
-                  </div>
-                </div>
-
-                {session?.user?.role === "admin" && (
-                  <div className="mb-3">
-                    <p className="font-semibold text-sm text-black">Submitted By</p>
-                    <p>{complaint.user_name}</p>
-                  </div>
-                )}
-
-                <div className="mb-3">
-                  <p className="font-semibold text-sm text-black">Details</p>
-                  <p>{complaint.details}</p>
-                </div>
-
-                <div className="mb-3">
-                  <p className="font-semibold text-sm text-black">Status</p>
-                  <p>{complaint.status}</p>
-                </div>
-
-                <div className="flex gap-2 justify-end mt-4">
-                  <button
-                    onClick={() => handleEditClick(complaint)}
-                    className="bg-blue-500 text-white px-3 py-1.5 rounded text-sm"
-                  >
-                    Edit
-                  </button>
-                  {/* Only visible to admins */}
-                  {session?.user?.role === 'admin' && (
-                    <button
-                      onClick={() => handleDelete(complaint.id)}
-                      className="bg-red-500 text-white px-3 py-1.5 rounded text-sm"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        </div>
-      </div>
+        ) : filteredcomplaints.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <ClipboardCheck size={40} strokeWidth={1.25} className="text-[var(--mute)]" />
+            <p className="mt-4 font-display text-lg font-semibold">All clear.</p>
+            <p className="mt-1 text-sm text-[var(--slate)]">No open complaints right now.</p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[860px] border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--hairline)] text-left">
+                    {[
+                      "Date",
+                      ...(isAdmin ? ["Submitted by"] : []),
+                      "Building",
+                      "Floor",
+                      "Area",
+                      "Type",
+                      "Details",
+                      "Status",
+                      "",
+                    ].map((h, i) => (
+                      <th
+                        key={i}
+                        className="pb-2.5 pr-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--mute)]"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredcomplaints.map((complaint, i) => (
+                    <tr
+                      key={complaint.id}
+                      className="animate-rise border-b border-[var(--hairline)] align-top transition-colors duration-150 hover:bg-[var(--paper)]"
+                      style={{ animationDelay: `${i * 40}ms` }}
+                    >
+                      <td className="py-3 pr-4 font-mono-num text-xs whitespace-nowrap text-[var(--slate)]">
+                        {fmtDate(complaint.date)}
+                      </td>
+                      {isAdmin && (
+                        <td className="py-3 pr-4 text-sm">
+                          {users.find((user) => user.id === complaint.user_id)?.name}
+                        </td>
+                      )}
+                      <td className="py-3 pr-4 text-sm">{complaint.building}</td>
+                      <td className="py-3 pr-4 text-sm">{complaint.floor}</td>
+                      <td className="py-3 pr-4 text-sm">{complaint.area_name}</td>
+                      <td className="py-3 pr-4 text-sm">{complaint.complaint_type_name}</td>
+                      <td className="max-w-[240px] py-3 pr-4 text-sm text-[var(--slate)]">{complaint.details}</td>
+                      <td className="py-3 pr-4">
+                        <StatusPill status={complaint.status} />
+                      </td>
+                      <td className="py-3">
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleEditClick(complaint)}
+                            aria-label="Edit"
+                            className="p-1.5 text-[var(--slate)] transition-colors hover:text-[var(--ink)]"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDelete(complaint.id)}
+                              aria-label="Delete"
+                              className="p-1.5 text-[var(--slate)] transition-colors hover:text-[var(--signal)]"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="space-y-3 md:hidden">
+              {filteredcomplaints.map((complaint, i) => (
+                <div
+                  key={complaint.id}
+                  className="animate-rise border border-[var(--hairline)] bg-[var(--paper)] p-4"
+                  style={{ animationDelay: `${i * 40}ms` }}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="font-mono-num text-xs text-[var(--slate)]">{fmtDate(complaint.date)}</span>
+                    <StatusPill status={complaint.status} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">Building</p>
+                      <p>{complaint.building}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">Floor</p>
+                      <p>{complaint.floor}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">Area</p>
+                      <p>{complaint.area_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">Type</p>
+                      <p>{complaint.complaint_type_name}</p>
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <div className="mt-3 text-sm">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">Submitted by</p>
+                      <p>{complaint.user_name}</p>
+                    </div>
+                  )}
+                  <div className="mt-3 text-sm">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--mute)]">Details</p>
+                    <p className="text-[var(--slate)]">{complaint.details}</p>
+                  </div>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={() => handleEditClick(complaint)}
+                      className="inline-flex items-center gap-1.5 border border-[var(--hairline)] px-3 py-1.5 text-sm text-[var(--slate)] transition-colors hover:text-[var(--ink)]"
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDelete(complaint.id)}
+                        className="inline-flex items-center gap-1.5 border border-[var(--hairline)] px-3 py-1.5 text-sm text-[var(--slate)] transition-colors hover:text-[var(--signal)]"
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Panel>
     </div>
   );
 }
