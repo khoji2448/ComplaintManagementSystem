@@ -12,6 +12,9 @@ export const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-pool.connect()
-  .then(() => {console.log("✅ Database connected")})
-  .catch((err) => {console.error("❌ Database connection error", err)});
+// Surface unexpected pool-level errors (e.g. a backend dropping an idle client)
+// without holding a connection open. Do NOT eagerly pool.connect() here — the
+// previous code never released that client, permanently leaking one connection.
+pool.on("error", (err) => {
+  console.error("❌ Unexpected database pool error", err);
+});

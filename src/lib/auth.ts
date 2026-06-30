@@ -1,13 +1,9 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 // import { compare } from "bcryptjs";
-import { Pool } from "pg";
+import { pool } from "@/lib/db";
 import { UserRoleType } from "@/types/types";
 import { getPermissionsForRole } from "@/lib/roles";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 export const authOptions: NextAuthOptions = {
   session: {

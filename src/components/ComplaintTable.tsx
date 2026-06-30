@@ -27,7 +27,9 @@ export default function ComplaintTable() {
 
   const fetchComplaints = async () => {
     try {
-      const response = await fetch(`/api/complaints`);
+      // Only open complaints are shown here — filter server-side instead of
+      // downloading every complaint and discarding the rest in the browser.
+      const response = await fetch(`/api/complaints?status=In-Progress`);
       const data = await response.json();
       setComplaints(data);
       setFilteredComplaints(data);
@@ -52,8 +54,14 @@ export default function ComplaintTable() {
     }
   };
 
+  // Depend on the primitive user id, not the whole session object. next-auth
+  // hands back a new session reference on mount, window-focus refetch, and
+  // provider re-renders; keying off `session` re-fired both fetches each time
+  // (the double-hit on /api/complaints and /api/users). The id only changes on
+  // login/logout, so this runs exactly once per session.
+  const userId = session?.user?.id;
   useEffect(() => {
-    if (session?.user?.id) {
+    if (userId) {
       fetchComplaints();
       fetchUsers();
     }
@@ -65,7 +73,7 @@ export default function ComplaintTable() {
 
     window.addEventListener("newComplaint", handleNewComplaint);
     return () => window.removeEventListener("newComplaint", handleNewComplaint);
-  }, [session]);
+  }, [userId]);
 
   const handleDelete = async (id: number) => {
     if (window.confirm("Delete this complaint? This can’t be undone.")) {
@@ -97,7 +105,8 @@ export default function ComplaintTable() {
   };
 
   const applyFilters = useCallback(() => {
-    let filtered = complaints.filter((complaint) => complaint.status === "In-Progress");
+    // Status is already filtered server-side; only the admin user filter remains.
+    let filtered = complaints;
     if (filters.user_id) {
       filtered = filtered.filter((report) => report.user_id === parseInt(filters.user_id));
     }
@@ -204,7 +213,7 @@ export default function ComplaintTable() {
                       </td>
                       {isAdmin && (
                         <td className="py-3 pr-4 text-sm">
-                          {users.find((user) => user.id === complaint.user_id)?.name}
+                          {complaint.user_name}
                         </td>
                       )}
                       <td className="py-3 pr-4 text-sm">{complaint.building}</td>

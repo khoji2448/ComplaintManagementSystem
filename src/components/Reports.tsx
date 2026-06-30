@@ -4,8 +4,6 @@ import { Floor, Status, Building } from '@/utils/constants';
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import React from 'react';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
 import { FileText, Sheet, FileSearch, RotateCcw, Search, X, SlidersHorizontal } from 'lucide-react';
 import Panel from '@/components/ui/Panel';
 import StatusPill from '@/components/ui/StatusPill';
@@ -195,12 +193,13 @@ const Reports = () => {
   // ── exports (operate on whatever is currently loaded) ──
   const exportToPDF = async () => {
     try {
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
       const autoTable = (await import('jspdf-autotable')).default as any;
       const head = [['Date', 'Submitted By', 'Building', 'Floor', 'Area', 'Type', 'Details', 'Status', 'Seen Date', 'Action', 'Resolution Date']];
       const body = reports.map((report) => [
         new Date(report.date).toDateString(),
-        users.find((user) => user.id === report.user_id)?.name,
+        report.user_name,
         report.building,
         report.floor,
         report.area_name,
@@ -225,11 +224,12 @@ const Reports = () => {
     }
   };
 
-  const exportToXLSX = () => {
+  const exportToXLSX = async () => {
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet(
       reports.map((report) => ({
         Date: new Date(report.date).toDateString(),
-        SubmittedBy: users.find((user) => user.id === report.user_id)?.name,
+        SubmittedBy: report.user_name,
         Building: report.building,
         Floor: report.floor,
         Area: report.area_name,

@@ -61,15 +61,25 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const { whereClause, values } = buildFilters(searchParams);
 
-    // Metrics queries 
+    // Metrics queries.
+    // All six counts + the average share the same table and base filter, so they
+    // collapse into ONE query via COUNT(*) FILTER (...). On a remote DB (this one
+    // lives in Neon ap-southeast-1) each query is a separate network round-trip,
+    // so folding 7 scalar queries into 1 is the single biggest latency win here.
     const queries = {
-      total: `SELECT COUNT(*)::int AS count FROM complaints ${whereClause};`,
-      open: `SELECT COUNT(*)::int AS count FROM complaints ${whereClause ? whereClause + ' AND' : 'WHERE'} COALESCE(status,'') <> 'Resolved';`,
-      createdThisMonth: `SELECT COUNT(*)::int AS count FROM complaints ${whereClause ? whereClause + ' AND' : 'WHERE'} DATE_TRUNC('month', date) = DATE_TRUNC('month', CURRENT_DATE);`,
-      inProgress: `SELECT COUNT(*)::int AS count FROM complaints ${whereClause ? whereClause + ' AND' : 'WHERE'} status = 'In-Progress';`,
-      unseen: `SELECT COUNT(*)::int AS count FROM complaints ${whereClause ? whereClause + ' AND' : 'WHERE'} seen = false;`,
-      resolvedThisMonth: `SELECT COUNT(*)::int AS count FROM complaints ${whereClause ? whereClause + ' AND' : 'WHERE'} status = 'Resolved' AND DATE_TRUNC('month', resolution_date) = DATE_TRUNC('month', CURRENT_DATE);`,
-      avgResolutionDays: `SELECT COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (resolution_date - date)) / 86400)::numeric, 1), 0) AS days FROM complaints ${whereClause ? whereClause + ' AND' : 'WHERE'} status = 'Resolved' AND resolution_date IS NOT NULL;`,
+      metrics: `
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE COALESCE(status,'') <> 'Resolved')::int AS open,
+          COUNT(*) FILTER (WHERE DATE_TRUNC('month', date) = DATE_TRUNC('month', CURRENT_DATE))::int AS created_this_month,
+          COUNT(*) FILTER (WHERE status = 'In-Progress')::int AS in_progress,
+          COUNT(*) FILTER (WHERE seen = false)::int AS unseen,
+          COUNT(*) FILTER (WHERE status = 'Resolved' AND DATE_TRUNC('month', resolution_date) = DATE_TRUNC('month', CURRENT_DATE))::int AS resolved_this_month,
+          COALESCE(ROUND(
+            (AVG(EXTRACT(EPOCH FROM (resolution_date - date)) / 86400)
+              FILTER (WHERE status = 'Resolved' AND resolution_date IS NOT NULL))::numeric
+          , 1), 0) AS avg_resolution_days
+        FROM complaints ${whereClause};`,
       byStatus: `SELECT COALESCE(status,'Unspecified') AS key, COUNT(*)::int AS value FROM complaints ${whereClause} GROUP BY COALESCE(status,'Unspecified') ORDER BY value DESC;`,
       byType: `SELECT COALESCE(ct.type_name,'Deleted Type') AS key, COUNT(*)::int AS value FROM complaints c LEFT JOIN complaint_types ct ON ct.id = c.complaint_type_id ${whereClause ? whereClause : ''} GROUP BY COALESCE(ct.type_name,'Deleted Type') ORDER BY value DESC;`,
       byDate: `WITH days AS (
@@ -94,33 +104,28 @@ export async function GET(req: Request) {
     } as const;
 
     // Execute queries with shared values. Some queries append extra conditions after whereClause;
-    // for those, we reuse the same params array.
-    const client = await pool.connect();
-    try {
-      const [total, open, createdThisMonth, inProgress, unseen, resolvedThisMonth, avgResolutionDays, byStatus, byType, byDate, recent] = await Promise.all([
-        client.query(queries.total, values),
-        client.query(queries.open, values),
-        client.query(queries.createdThisMonth, values),
-        client.query(queries.inProgress, values),
-        client.query(queries.unseen, values),
-        client.query(queries.resolvedThisMonth, values),
-        client.query(queries.avgResolutionDays, values),
-        client.query(queries.byStatus, values),
-        client.query(queries.byType, values),
-        client.query(queries.byDate, values),
-        client.query(queries.recent, values),
-      ]);
+    // for those, we reuse the same params array. Run via pool.query (not a single
+    // pooled client) so the pool can spread them across connections and run them
+    // concurrently — a single client serializes queries one at a time.
+    const [metrics, byStatus, byType, byDate, recent] = await Promise.all([
+      pool.query(queries.metrics, values),
+      pool.query(queries.byStatus, values),
+      pool.query(queries.byType, values),
+      pool.query(queries.byDate, values),
+      pool.query(queries.recent, values),
+    ]);
 
-      const data = {
+    const m = metrics.rows[0] ?? {};
+    const data = {
         counts: {
-          total: total.rows[0]?.count ?? 0,
-          open: open.rows[0]?.count ?? 0,
-          createdThisMonth: createdThisMonth.rows[0]?.count ?? 0,
-          inProgress: inProgress.rows[0]?.count ?? 0,
-          unseen: unseen.rows[0]?.count ?? 0,
-          resolvedThisMonth: resolvedThisMonth.rows[0]?.count ?? 0,
+          total: m.total ?? 0,
+          open: m.open ?? 0,
+          createdThisMonth: m.created_this_month ?? 0,
+          inProgress: m.in_progress ?? 0,
+          unseen: m.unseen ?? 0,
+          resolvedThisMonth: m.resolved_this_month ?? 0,
         },
-        avgResolutionDays: Number(avgResolutionDays.rows[0]?.days ?? 0),
+        avgResolutionDays: Number(m.avg_resolution_days ?? 0),
         series: {
           byStatus: byStatus.rows, // [{ key, value }]
           byType: byType.rows,     // [{ key, value }]
@@ -129,10 +134,7 @@ export async function GET(req: Request) {
         recent: recent.rows,
       };
 
-      return NextResponse.json(data);
-    } finally {
-      client.release();
-    }
+    return NextResponse.json(data);
   } catch (error: unknown) {
     console.error("/api/dashboard error", error);
     return NextResponse.json({ error: (error as Error)?.message || "Internal Server Error" }, { status: 500 });

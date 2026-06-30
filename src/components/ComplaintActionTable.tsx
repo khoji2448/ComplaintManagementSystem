@@ -23,7 +23,6 @@ export default function ComplaintActionTable() {
   const [actionTaken, setActionTaken] = useState<string>("");
 
   const { data: session } = useSession();
-  const userRole = session?.user?.role;
 
   useEffect(() => {
     fetch("/api/complaintaction")
@@ -49,9 +48,8 @@ export default function ComplaintActionTable() {
       });
       if (!response.ok) throw new Error("Failed to mark complaint as resolved");
 
-      setComplaints((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, status: "Resolved", action: actionTaken } : c))
-      );
+      // The queue only shows open complaints, so drop the resolved one locally.
+      setComplaints((prev) => prev.filter((c) => c.id !== id));
       notify.success("Complaint resolved");
       closeResolve();
     } catch (error) {
@@ -79,15 +77,9 @@ export default function ComplaintActionTable() {
     }
   };
 
-  // Visible rows by role
-  const visibleComplaints: Complaint[] =
-    userRole === "manager"
-      ? complaints.filter((c) => c.status === "In-Progress" && c.complaint_type_name !== "IT Issues")
-      : userRole === "it_manager"
-        ? complaints.filter((c) => c.status === "In-Progress" && c.complaint_type_name === "IT Issues")
-        : userRole === "admin"
-          ? complaints.filter((c) => c.status === "In-Progress")
-          : [];
+  // The API already returns exactly this role's open complaints (status +
+  // type filtering happens in SQL), so no further client-side filtering needed.
+  const visibleComplaints: Complaint[] = complaints;
 
   const exportToPDF = async () => {
     try {
